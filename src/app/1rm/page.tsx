@@ -9,13 +9,23 @@ const EVENTS = [
   "오버헤드프레스"
 ];
 
+interface RepsTableItem {
+  reps: number;
+  weight: number;
+}
+
+interface CalculateResult {
+    oneRm: number;
+    repsTable: RepsTableItem[];
+}
+
 export default function OneRMPage() {
   const [event, setEvent] = useState("");
   const [weight, setWeight] = useState("");
   const [unit, setUnit] = useState("KG");
   const [reps, setReps] = useState(1);
   const [showResult, setShowResult] = useState(false);
-  const [result, setResult] = useState<any[]>([]);
+  const [result, setResult] = useState<RepsTableItem[]>([]);
   const [oneRM, setOneRM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,71 +51,57 @@ export default function OneRMPage() {
     setUnit(newUnit);
   };
 
-  const handleStart = async () => {
-    if (!event || !weight || !reps) {
-      setError("모든 필드를 입력해주세요.");
-      setShowResult(false);
-      return;
-    }
-
-    const w = parseFloat(weight);
-    if (isNaN(w) || w <= 0) {
-      setError("올바른 무게를 입력해주세요.");
-      setShowResult(false);
-      return;
-    }
-
-    setShowResult(true);
-    setError(null);
-  };
-
   useEffect(() => {
     const calculateOnerm = async () => {
-      if (!event || !weight || !reps) {
-        setShowResult(false);
-        return;
-      }
-
-      const w = parseFloat(weight);
-      if (isNaN(w) || w <= 0) {
-        setShowResult(false);
-        return;
-      }
-
-      try {
-        const response = await fetch('http://localhost:3001/onerm/cal', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            weight: w,
-            reps: reps
-          })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || '1RM 계산 중 오류가 발생했습니다.');
+        if (!event || !weight || !reps) {
+            setShowResult(false); // 필드 미완성 시 결과 숨김
+            return;
         }
 
-        const data = await response.json();
-        setOneRM(data.oneRm);
-        setResult(data.repsTable.map((item: any) => ({
-          reps: item.reps,
-          weight: `${item.weight} ${unit}`
-        })));
-        setError(null);
-        setShowResult(true);
-      } catch (error) {
-        setError(error instanceof Error ? error.message : '1RM 계산 중 오류가 발생했습니다.');
-        setShowResult(false);
-      }
+        const w = parseFloat(weight);
+        if (isNaN(w) || w <= 0) {
+             setShowResult(false); // 유효하지 않은 무게 입력 시 결과 숨김
+             return;
+        }
+
+        try {
+          const response = await fetch('http://localhost:3001/onerm/cal', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              weight: w,
+              reps: reps
+            })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || '1RM 계산 중 오류가 발생했습니다.');
+          }
+
+          const data: CalculateResult = await response.json();
+          setOneRM(data.oneRm);
+          setResult(data.repsTable);
+          setError(null);
+          setShowResult(true); // 성공적으로 결과를 받아오면 결과 영역 표시
+        } catch (error) {
+          setError(error instanceof Error ? error.message : '1RM 계산 중 오류가 발생했습니다.');
+          setShowResult(false); // 에러 발생 시 결과 숨김
+        }
     };
 
-    if (showResult) {
-      calculateOnerm();
+    // showResult 상태가 true일 때만 계산 실행 (handleStart 클릭 시 true가 됨)
+    // 또는 event, weight, unit, reps가 모두 유효할 때 실행
+    if (showResult || (event && parseFloat(weight) > 0 && reps)) {
+         calculateOnerm();
+    } else {
+         setShowResult(false);
+         setResult([]);
+         setOneRM(null);
     }
+
   }, [event, weight, unit, reps, showResult]);
 
   const handleReset = () => {
@@ -180,11 +176,6 @@ export default function OneRMPage() {
       <div style={{ textAlign: 'center', margin: '32px 0 0 0', display: 'flex', justifyContent: 'center', gap: 16 }}>
         <button
           type="button"
-          style={{ padding: '12px 32px', background: '#ccc', border: 'none', borderRadius: 4, fontWeight: 600, fontSize: 18 }}
-          onClick={() => setShowResult(true)}
-        >측정 시작</button>
-        <button
-          type="button"
           style={{ padding: '12px 32px', background: 'Crimson', color: 'white', border: 'none', borderRadius: 4, fontWeight: 600, fontSize: 18 }}
           onClick={handleReset}
         >초기화</button>
@@ -192,6 +183,7 @@ export default function OneRMPage() {
       {/* 결과 표시 */}
       {showResult && (
         <div style={{ marginTop: 32 }}>
+          {oneRM !== null && <h2 style={{ fontSize: 24, marginBottom: 16 }}>1RM: {oneRM} {unit}</h2>}
           <div style={{ 
             display: 'grid', 
             gridTemplateColumns: 'repeat(2, 1fr)', 
@@ -202,10 +194,10 @@ export default function OneRMPage() {
           }}>
             <div style={{ fontWeight: 600 }}>반복 횟수(Reps)</div>
             <div style={{ fontWeight: 600 }}>예상 무게(KG/LBS)</div>
-            {result.map((item, index) => (
+            {result.map((item: RepsTableItem, index) => (
               <React.Fragment key={index}>
                 <div>{item.reps}회</div>
-                <div>{item.weight}</div>
+                <div>{item.weight} {unit}</div>
               </React.Fragment>
             ))}
           </div>
