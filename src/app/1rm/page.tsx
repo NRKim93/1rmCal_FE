@@ -183,7 +183,7 @@ export default function OneRMPage() {
       {/* 결과 표시 */}
       {showResult && (
         <div style={{ marginTop: 32 }}>
-          {oneRM !== null && <h2 style={{ fontSize: 24, marginBottom: 16 }}>1RM: {oneRM} {unit}</h2>}
+          {oneRM !== null && <h2 style={{ fontSize: 24, marginBottom: 16 }}>측정 결과</h2>}
           <div style={{ 
             display: 'grid', 
             gridTemplateColumns: 'repeat(2, 1fr)', 
