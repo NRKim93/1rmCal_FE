@@ -1,0 +1,36 @@
+.wrapper {
+  max-width: 400px;
+  margin: 60px auto;
+  padding: 24px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}
+
+.title {
+  font-size: 2em;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+.submitBtn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 4px;
+  background: #2db400;
+  color: #fff;
+  border: none;
+  font-weight: bold;
+}
+
+.error {
+  color: red;
+  margin-top: 12px;
+} 

@@ -20,9 +20,13 @@ export default function NaverCallback() {
       axios.get(backendUrl, { params: { code, state } })
         .then((response: any) => {
           // TODO: 로그인 성공 후 처리 (예: 토큰 저장, 메인 페이지로 이동)
-          console.log('로그인 성공:', response.data);
-          alert(response.data.statusCode);
-          router.push('/'); // 로그인 성공 시 메인 페이지로 이동
+          if(response.data.statusCode === 201){
+            router.push(`/auth/naver/nickname?email=${encodeURIComponent(response.data.data)}`); //  회원가입 후 닉네임 입력 페이지로 
+          }else if(response.data.statusCode === 200){
+            alert('이미 가입된 회원입니다.');
+            router.push('/'); //  이미 가입된 회원이면 로그인 처리
+          }
+
         })
         .catch((error: any) => {
           console.error('로그인 실패:', error);
