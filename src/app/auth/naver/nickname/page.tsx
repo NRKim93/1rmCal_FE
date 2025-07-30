@@ -1,6 +1,6 @@
 'use client';
 
-import styles from './nickname.module.css';
+import styles from './css/nickname.module.css';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';

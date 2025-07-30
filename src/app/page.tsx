@@ -1,7 +1,7 @@
 "use client";
-import styles from './page.module.css';
+import styles from './css/page.module.css';
 import { useState } from "react";
-import LoginModal from "../components/LoginModal";
+import LoginModal from "../components/LoginModal/LoginModal";
 
 export default function HomePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);

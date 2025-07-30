@@ -1,5 +1,5 @@
 "use client";
-import styles from './1rm.module.css';
+import styles from './css/1rm.module.css';
 import React, { useState, useEffect } from "react";
 
 const EVENTS = [
