@@ -24,15 +24,16 @@ export default function NaverCallback() {
           if(response.data.statusCode === 201){
             if(mode === 'signup') {
               router.push(`/auth/naver/nickname?email=${encodeURIComponent(response.data.data)}`); //  회원가입 후 닉네임 입력 페이지로 
-            } else alert('등록되지 않은 회원입니다. 회원가입 부탁드립니다. ');
-
-            router.push('/');
+            } else {
+              alert('등록되지 않은 회원입니다. 회원가입 부탁드립니다. ');
+              router.push('/');
+            }
 
           }else if(response.data.statusCode === 200){
             if (mode === 'signup') {
               alert('이미 가입된 회원입니다.');
-            }
-            router.push('/'); //  이미 가입된 회원이면 로그인 처리
+              router.push('/');
+            } else router.push('/dashboard'); //  이미 가입된 회원이면 로그인 처리
           }
 
         })

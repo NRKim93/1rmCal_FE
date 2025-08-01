@@ -1,6 +1,7 @@
 "use client";
 import styles from './css/1rm.module.css';
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 const EVENTS = [
   "벤치프레스",
@@ -21,6 +22,7 @@ interface CalculateResult {
 }
 
 export default function OneRMPage() {
+  const router = useRouter();
   const [event, setEvent] = useState("");
   const [weight, setWeight] = useState("");
   const [unit, setUnit] = useState("KG");
@@ -118,6 +120,9 @@ export default function OneRMPage() {
 
   return (
     <div className={styles.wrapper}>
+      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+        <button onClick={() => router.back()} style={{ margin: '16px 0', padding: '8px 16px', borderRadius: '6px', border: '1px solid #bbb', background: '#ffffff', cursor: 'pointer', fontWeight: 'bold' }}>{'← 이전으로'}</button>
+      </div>
       <h1 className={styles.heading}>1RM 측정기</h1>
       {error && (
         <div className={styles.error}>{error}</div>
