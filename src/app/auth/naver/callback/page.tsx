@@ -14,9 +14,15 @@ export default function NaverCallback() {
     const mode = searchParams.get('mode');
 
     if (code) {
-      // 이 URL은 백엔드 서버의 주소여야 합니다.
-      // 지금은 예시로 작성했으며, 실제 백엔드 주소로 변경해야 합니다.
-      const backendUrl = 'http://localhost:3001/api/v1/users/naver/createNaverUser'; 
+      // 환경변수에서 백엔드 URL 가져오기
+      const backendUrl = process.env.NEXT_PUBLIC_NAVER_LOGIN_API_URL;
+      
+      if (!backendUrl) {
+        console.error('백엔드 URL이 설정되지 않았습니다.');
+        alert('서버 설정 오류가 발생했습니다.');
+        router.push('/');
+        return;
+      }
 
       axios.get(backendUrl, { params: { code, state, mode } })
         .then((response: any) => {

@@ -56,19 +56,46 @@ export default function OneRMPage() {
 
   useEffect(() => {
     const calculateOnerm = async () => {
-        if (!event || !weight || !reps) {
-            setShowResult(false); // 필드 미완성 시 결과 숨김
+        // 입력값 검증
+        if (!event) {
+            setError('종목을 선택해주세요.');
+            setShowResult(false);
+            return;
+        }
+        
+        if (!weight || weight.trim() === '') {
+            setError('중량을 입력해주세요.');
+            setShowResult(false);
             return;
         }
 
         const w = parseFloat(weight);
         if (isNaN(w) || w <= 0) {
-             setShowResult(false); // 유효하지 않은 무게 입력 시 결과 숨김
-             return;
+            setError('유효한 중량을 입력해주세요.');
+            setShowResult(false);
+            return;
+        }
+
+        if (w > 1000) {
+            setError('중량이 너무 큽니다. 다시 확인해주세요.');
+            setShowResult(false);
+            return;
+        }
+
+        if (!reps || reps < 1 || reps > 20) {
+            setError('반복 횟수는 1-20 사이여야 합니다.');
+            setShowResult(false);
+            return;
         }
 
         try {
-          const response = await fetch('http://localhost:3001/onerm/cal', {
+          const backendUrl = process.env.NEXT_PUBLIC_ONERM_URL;
+          
+          if (!backendUrl) {
+            throw new Error('서버 설정이 완료되지 않았습니다. 관리자에게 문의해주세요.');
+          }
+
+          const response = await fetch(backendUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -80,18 +107,42 @@ export default function OneRMPage() {
           });
 
           if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || '1RM 계산 중 오류가 발생했습니다.');
+            let errorMessage = '1RM 계산 중 오류가 발생했습니다.';
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.message || errorMessage;
+            } catch (parseError) {
+              // JSON 파싱 실패 시 기본 에러 메시지 사용
+              console.warn('에러 응답 파싱 실패:', parseError);
+            }
+            
+            if (response.status === 404) {
+              errorMessage = '1RM 계산 서비스를 찾을 수 없습니다.';
+            } else if (response.status === 500) {
+              errorMessage = '서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+            } else if (response.status >= 400 && response.status < 500) {
+              errorMessage = '잘못된 요청입니다. 입력값을 확인해주세요.';
+            }
+            
+            throw new Error(errorMessage);
           }
 
           const data: CalculateResult = await response.json();
+          
+          // 응답 데이터 유효성 검사
+          if (!data || typeof data.oneRm !== 'number' || !Array.isArray(data.repsTable)) {
+            throw new Error('서버에서 잘못된 응답을 받았습니다.');
+          }
+          
           setOneRM(data.oneRm);
           setResult(data.repsTable);
           setError(null);
-          setShowResult(true); // 성공적으로 결과를 받아오면 결과 영역 표시
+          setShowResult(true);
         } catch (error) {
-          setError(error instanceof Error ? error.message : '1RM 계산 중 오류가 발생했습니다.');
-          setShowResult(false); // 에러 발생 시 결과 숨김
+          const errorMessage = error instanceof Error ? error.message : '1RM 계산 중 오류가 발생했습니다.';
+          setError(errorMessage);
+          setShowResult(false);
+          console.error('1RM 계산 오류:', error);
         }
     };
 
@@ -125,7 +176,17 @@ export default function OneRMPage() {
       </div>
       <h1 className={styles.heading}>1RM 측정기</h1>
       {error && (
-        <div className={styles.error}>{error}</div>
+        <div className={styles.error} style={{
+          backgroundColor: '#fee',
+          color: '#c33',
+          padding: '12px',
+          borderRadius: '6px',
+          marginBottom: '16px',
+          border: '1px solid #fcc',
+          fontSize: '14px'
+        }}>
+          ⚠️ {error}
+        </div>
       )}
       {/* 종목 선택 */}
       <div className={styles.selectBox}>
