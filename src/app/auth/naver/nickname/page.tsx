@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { useSearchParams } from 'next/navigation';
+import { signup } from '@/services/auth.service';
 
 export default function NaverNicknamePage() {
   const [nickname, setNickname] = useState('');
@@ -16,14 +17,20 @@ export default function NaverNicknamePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
     if (!nickname.trim()) {
       setError('닉네임을 입력해 주세요.');
       return;
     }
+
+    if(!email) {
+      setError('이메일이 누락되어있습니다. ');
+      return;
+    }
+
     try {
       // TODO: 실제 백엔드 API 주소로 변경 필요
-      const backendUrl = 'http://localhost:3001/api/v1/users/setNickname';
-      await axios.post(backendUrl, { nickName: nickname, email: email });
+      await signup({email: email, nickName: nickname});
       alert('닉네임이 등록되었습니다!');
       router.push('/'); // 메인 페이지로 이동
     } catch (err: any) {

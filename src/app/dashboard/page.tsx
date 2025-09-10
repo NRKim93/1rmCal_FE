@@ -1,7 +1,8 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "../css/dashboard.module.css";
+import { hasLogin } from "@/services/auth.service";
 
 const gyms = [
   { id: 1, name: "1번 헬스장", distance: "500m", hours: "24h", closed: "매 주 일요일" },
@@ -11,11 +12,48 @@ const gyms = [
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // 인증 상태 확인
+    if (!hasLogin()) {
+      alert('로그인이 필요합니다.');
+      router.push('/');
+      return;
+    }
+    setIsLoading(false);
+  }, [router]);
+
+  const handleLogout = () => {
+    logout();
+    router.push('/');
+  };
+
+  if (isLoading) {
+    return <div>로딩 중...</div>;
+  }
+
   return (
     <div className={styles.container}>
       <header className={styles.header}>
         <div className={styles.userIcon}>유저 아이콘</div>
-        <button className={styles.mapBtn}>지도</button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className={styles.mapBtn}>지도</button>
+          <button 
+            onClick={handleLogout}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#ff4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            로그아웃
+          </button>
+        </div>
       </header>
       <section className={styles.gymSection}>
         <h2>내 주변 헬스장</h2>

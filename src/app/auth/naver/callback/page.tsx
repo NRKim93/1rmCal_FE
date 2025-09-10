@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import axios from 'axios';
+import { hasLogin, naverLogin } from '@/services/auth.service';
 
 export default function NaverCallback() {
   const searchParams = useSearchParams();
@@ -24,7 +24,7 @@ export default function NaverCallback() {
         return;
       }
 
-      axios.get(backendUrl, { params: { code, state, mode } })
+      naverLogin(code,state ?? '', mode ?? '')
         .then((response: any) => {
           // TODO: 로그인 성공 후 처리 (예: 토큰 저장, 메인 페이지로 이동)
           if(response.data.statusCode === 201){
@@ -39,9 +39,22 @@ export default function NaverCallback() {
             if (mode === 'signup') {
               alert('이미 가입된 회원입니다.');
               router.push('/');
-            } else router.push('/dashboard'); //  이미 가입된 회원이면 로그인 처리
-          }
+            } else {
+              // 로그인 성공 - 쿠키가 자동으로 브라우저에 저장됨
+              // 쿠키 확인 후 대시보드로 이동
+              setTimeout(async () => {
+                if (await hasLogin()) {
+                  console.log('로그인 성공: 쿠키가 정상적으로 저장되었습니다.');
+                  router.push('/dashboard');
+                } else {
+                  console.error('로그인 실패: 쿠키가 저장되지 않았습니다.');
+                  alert('로그인 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+                  router.push('/');
+                }
+              }, 100); // 쿠키가 브라우저에 저장될 시간을 주기 위해 약간의 지연
+            }
 
+          }
         })
         .catch((error: any) => {
           console.error('로그인 실패:', error);
