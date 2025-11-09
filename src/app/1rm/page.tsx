@@ -2,6 +2,7 @@
 import styles from './css/1rm.module.css';
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { RepsTableItem, CalculateResult } from "@/lib/types";
 
 const EVENTS = [
   "벤치프레스",
@@ -10,16 +11,6 @@ const EVENTS = [
   "데드리프트(스모)",
   "오버헤드프레스"
 ];
-
-interface RepsTableItem {
-  reps: number;
-  weight: number;
-}
-
-interface CalculateResult {
-    oneRm: number;
-    repsTable: RepsTableItem[];
-}
 
 export default function OneRMPage() {
   const router = useRouter();

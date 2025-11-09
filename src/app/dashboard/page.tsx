@@ -76,7 +76,7 @@ export default function DashboardPage() {
         <div className={styles.calendarPlaceholder}>달력 표시</div>
       </section>
       <footer className={styles.footer}>
-        <button className={styles.footerBtn}>트레이닝 기록</button>
+        <button className={styles.footerBtn} onClick={() => router.push('/trainingMain')}>트레이닝 기록</button>
         <button className={styles.footerBtn}>트레이닝 분석</button>
         <button className={styles.footerBtn} onClick={() => router.push('/1rm')}>1RM 측정</button>
       </footer>

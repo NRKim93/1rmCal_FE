@@ -1,6 +1,5 @@
-import { APIResponse } from "@/types/common.type"
+import { APIResponse, NaverLoginResponse, SignUpPayload } from "@/lib/types"
 import instance from "./api"
-import { NaverLoginResponse, SignUpPayload } from "@/types/auth.type"
 
 export const naverLogin = async (code:string, state?: string, mode?: string) => {
     return await instance.get<APIResponse<{data : NaverLoginResponse}>> (

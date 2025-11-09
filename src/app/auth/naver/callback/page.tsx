@@ -27,7 +27,7 @@ export default function NaverCallback() {
       naverLogin(code,state ?? '', mode ?? '')
         .then((response: any) => {
           // TODO: 로그인 성공 후 처리 (예: 토큰 저장, 메인 페이지로 이동)
-          if(response.data.statusCode === 201){
+          if(response.data.data.code === 201){
             if(mode === 'signup') {
               router.push(`/auth/naver/nickname?email=${encodeURIComponent(response.data.data)}`); //  회원가입 후 닉네임 입력 페이지로 
             } else {
@@ -35,11 +35,18 @@ export default function NaverCallback() {
               router.push('/');
             }
 
-          }else if(response.data.statusCode === 200){
+          }else if(response.data.data.code === 200){
             if (mode === 'signup') {
               alert('이미 가입된 회원입니다.');
               router.push('/');
             } else {
+              // 사용자 ID를 localStorage에 저장
+              const seq = response.data.data.seq;
+              if (seq) {
+                localStorage.setItem('seq', seq);
+                console.log('사용자 ID 저장:', seq);
+              }
+
               // 로그인 성공 - 쿠키가 자동으로 브라우저에 저장됨
               // 쿠키 확인 후 대시보드로 이동
               setTimeout(async () => {
