@@ -9,7 +9,8 @@ export type {
   TrainingHistoryItem,
   TrainingUser,
   TrainingData,
-  LatestHistoryResponse
+  LatestHistoryResponse,
+  Exercise
 } from './training';
 
 // OneRM types

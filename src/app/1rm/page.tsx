@@ -1,5 +1,4 @@
 "use client";
-import styles from './css/1rm.module.css';
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RepsTableItem, CalculateResult } from "@/lib/types";
@@ -161,31 +160,29 @@ export default function OneRMPage() {
   };
 
   return (
-    <div className={styles.wrapper}>
-      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-        <button onClick={() => router.back()} style={{ margin: '16px 0', padding: '8px 16px', borderRadius: '6px', border: '1px solid #bbb', background: '#ffffff', cursor: 'pointer', fontWeight: 'bold' }}>{'← 이전으로'}</button>
+    <div className="mx-auto my-10 max-w-[500px] text-center">
+      <div className="flex justify-start">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="my-4 rounded-md border border-gray-300 bg-white px-4 py-2 font-bold hover:bg-gray-50"
+        >
+          ← 이전으로
+        </button>
       </div>
-      <h1 className={styles.heading}>1RM 측정기</h1>
+      <h1 className="mb-2 text-4xl font-black">1RM 측정기</h1>
       {error && (
-        <div className={styles.error} style={{
-          backgroundColor: '#fee',
-          color: '#c33',
-          padding: '12px',
-          borderRadius: '6px',
-          marginBottom: '16px',
-          border: '1px solid #fcc',
-          fontSize: '14px'
-        }}>
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           ⚠️ {error}
         </div>
       )}
       {/* 종목 선택 */}
-      <div className={styles.selectBox}>
-        <label className={styles.label}>종목 선택</label>
+      <div className="mb-2 mt-6">
+        <label className="mb-1 block font-semibold">종목 선택</label>
         <select
           value={event}
           onChange={e => setEvent(e.target.value)}
-          className={styles.select}
+          className="w-full rounded border border-gray-300 bg-white p-3 text-center text-base"
         >
           <option value="">종목을 선택하세요</option>
           {EVENTS.map(ev => (
@@ -194,55 +191,55 @@ export default function OneRMPage() {
         </select>
       </div>
       {/* 중량 입력 */}
-      <div className={styles.inputBox}>
-        <label className={styles.label}>중량을 입력해 주세요</label>
+      <div className="my-4">
+        <label className="mb-1 block font-semibold">중량을 입력해 주세요</label>
         <input
           type="text"
           placeholder="중량을 입력하세요"
           value={weight}
           onChange={e => setWeight(e.target.value)}
-          className={styles.input}
+          className="mt-2 w-full rounded border border-gray-300 p-3 text-center text-base"
         />
       </div>
       {/* 단위 선택 */}
-      <div className={styles.unitBox}>
+      <div className="my-4 flex gap-4">
         <button
           type="button"
-          className={unit === 'KG' ? styles.unitActive : styles.unit}
+          className={`flex-1 rounded p-3 font-bold ${unit === "KG" ? "bg-gray-400" : "bg-gray-200"}`}
           onClick={() => handleUnitChange('KG')}
         >KG</button>
         <button
           type="button"
-          className={unit === 'LBS' ? styles.unitActive : styles.unit}
+          className={`flex-1 rounded p-3 font-bold ${unit === "LBS" ? "bg-gray-400" : "bg-gray-200"}`}
           onClick={() => handleUnitChange('LBS')}
         >LBS</button>
       </div>
       {/* 반복 횟수 선택 */}
-      <div className={styles.repsBox}>
+      <div className="my-4 flex gap-4">
         {[1, 3, 5].map(n => (
           <button
             key={n}
             type="button"
-            className={reps === n ? styles.repsActive : styles.reps}
+            className={`flex-1 rounded p-3 font-bold ${reps === n ? "bg-gray-400" : "bg-gray-200"}`}
             onClick={() => setReps(n)}
           >{n}회</button>
         ))}
       </div>
       {/* 측정 시작/초기화 버튼 */}
-      <div className={styles.actionBox}>
+      <div className="mt-8 flex justify-center gap-4">
         <button
           type="button"
-          className={styles.resetBtn}
+          className="rounded bg-red-600 px-8 py-3 text-lg font-semibold text-white hover:bg-red-700"
           onClick={handleReset}
         >초기화</button>
       </div>
       {/* 결과 표시 */}
       {showResult && (
-        <div className={styles.resultBox}>
-          {oneRM !== null && <h2 className={styles.resultTitle}>측정 결과</h2>}
-          <div className={styles.resultGrid}>
-            <div className={styles.resultHeader}>반복 횟수(Reps)</div>
-            <div className={styles.resultHeader}>예상 무게(KG/LBS)</div>
+        <div className="mt-8">
+          {oneRM !== null && <h2 className="mb-4 text-2xl">측정 결과</h2>}
+          <div className="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 p-4">
+            <div className="font-semibold">반복 횟수(Reps)</div>
+            <div className="font-semibold">예상 무게(KG/LBS)</div>
             {result.map((item: RepsTableItem, index) => (
               <React.Fragment key={index}>
                 <div>{item.reps}회</div>

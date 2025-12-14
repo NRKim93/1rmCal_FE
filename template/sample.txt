@@ -1,0 +1,39 @@
+├─app
+│  ├─providers
+│  └─styles
+├─features
+│  ├─auth
+│  │  ├─api
+│  │  ├─model
+│  │  └─ui
+│  ├─category-management
+│  │  ├─api
+│  │  └─ui
+│  ├─code-management
+│  │  ├─api
+│  │  └─lib
+│  ├─layout
+│  │  └─model
+│  ├─menu-management
+│  │  ├─api
+│  │  ├─lib
+│  │  └─ui
+│  ├─template-tree
+│  │  ├─api
+│  │  └─ui
+│  └─user-management
+│      ├─api
+│      └─ui
+├─lib
+├─pages
+│  └─template
+└─shared
+    ├─api
+    ├─config
+    ├─lib
+    ├─types
+    ├─ui
+    │  ├─common
+    │  ├─images
+    │  └─layout
+    └─utils

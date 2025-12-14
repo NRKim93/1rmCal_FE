@@ -1,15 +1,18 @@
 "use client";
-import styles from './css/page.module.css';
 import { useState } from "react";
-import LoginModal from "../components/LoginModal/LoginModal";
+import LoginModal from "@/app/auth/(components)/LoginModal/LoginModal";
 
 export default function HomePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
-    <div className={styles.container}>
-      <h1 className={styles.title}>THE GYM</h1>
-      <button className={styles.button} onClick={() => setIsModalOpen(true)}>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-100">
+      <h1 className="mb-8 text-6xl font-black">THE GYM</h1>
+      <button
+        type="button"
+        className="cursor-pointer rounded border border-gray-800 bg-white px-8 py-4 text-lg hover:bg-gray-50"
+        onClick={() => setIsModalOpen(true)}
+      >
         Let's Train
       </button>
 

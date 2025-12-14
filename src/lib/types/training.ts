@@ -26,3 +26,11 @@ export type LatestHistoryResponse = {
   data: TrainingData[];
   message: string;
 };
+
+// UI 표시용 운동 항목
+export interface Exercise {
+  name: string;
+  sets: number;
+  weight: string;
+  topSet: string;
+}

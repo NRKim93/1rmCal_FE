@@ -1,6 +1,5 @@
 "use client";
 import React from 'react';
-import styles from './Modal.module.css';
 
 interface ModalProps {
   isOpen: boolean;
@@ -27,17 +26,32 @@ export default function Modal({
 
   return (
     <div
-      className={`${styles.overlay} ${overlayClassName}`}
+      className={[
+        'fixed inset-0 flex items-center justify-center bg-black/70',
+        overlayClassName,
+      ]
+        .filter(Boolean)
+        .join(' ')}
       style={{ zIndex }}
       onClick={onClose}
     >
       <div
-        className={`${styles.content} ${contentClassName}`}
+        className={[
+          'relative max-h-[90vh] max-w-[90vw] overflow-auto rounded-[10px] bg-white px-[50px] py-10 text-center',
+          contentClassName,
+        ]
+          .filter(Boolean)
+          .join(' ')}
         style={{ width }}
         onClick={(e) => e.stopPropagation()}
       >
         {showCloseButton && (
-          <button className={styles.closeBtn} onClick={onClose}>
+          <button
+            className="absolute right-2.5 top-2.5 flex h-[30px] w-[30px] items-center justify-center bg-transparent p-0 text-[1.5em] leading-none text-transparent hover:text-transparent after:absolute after:inset-0 after:flex after:items-center after:justify-center after:content-['×'] after:text-[#333] hover:after:text-black"
+            onClick={onClose}
+            type="button"
+            aria-label="Close"
+          >
             ×
           </button>
         )}

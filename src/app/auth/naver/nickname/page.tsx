@@ -1,9 +1,7 @@
 'use client';
 
-import styles from './css/nickname.module.css';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
 import { useSearchParams } from 'next/navigation';
 import { signup } from '@/services/auth.service';
 
@@ -39,20 +37,23 @@ export default function NaverNicknamePage() {
   };
 
   return (
-    <div className={styles.wrapper}>
-      <h2 className={styles.title}>닉네임 입력</h2>
+    <div className="mx-auto my-16 max-w-[400px] rounded-lg border border-gray-200 p-6">
+      <h2 className="mb-5 text-2xl font-bold">닉네임 입력</h2>
       <form onSubmit={handleSubmit}>
         <input
           type="text"
           placeholder="닉네임을 입력하세요"
           value={nickname}
           onChange={e => setNickname(e.target.value)}
-          className={styles.input}
+          className="mb-3 w-full rounded border border-gray-300 px-3 py-2"
         />
-        <button type="submit" className={styles.submitBtn}>
+        <button
+          type="submit"
+          className="w-full rounded bg-[#2db400] px-4 py-2.5 font-bold text-white hover:bg-[#279a00]"
+        >
           등록하기
         </button>
-        {error && <p className={styles.error}>{error}</p>}
+        {error && <p className="mt-3 text-red-600">{error}</p>}
       </form>
     </div>
   );
