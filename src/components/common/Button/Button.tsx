@@ -27,7 +27,7 @@ export default function Button({
     primary: 'bg-[#87CEEB] text-white enabled:hover:bg-[#6BB8D8]',
     secondary: 'bg-white text-[#333] border border-[#333]',
     naver: 'bg-[#1EC800] text-white enabled:hover:bg-[#17A800]',
-    outline: 'bg-white text-[#333] border border-[#ddd] enabled:hover:bg-gray-200 enabled:hover:border-[#bbb]',
+    outline: 'text-[#333] border border-[#ddd] enabled:hover:bg-gray-200 enabled:hover:border-[#bbb]',
     danger: 'bg-[#ff4444] text-white enabled:hover:bg-[#cc0000]',
   };
 

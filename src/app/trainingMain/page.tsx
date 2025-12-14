@@ -85,12 +85,17 @@ export default function TrainingMainPage() {
 
       <section className="p-5">
         <h2 className="mb-4 text-lg font-semibold text-gray-800">현재 진행중인 프로그램</h2>
-        <ProgramCard exercises={exercises} trainingDate={trainingDate} />
+        <ProgramCard
+          exercises={exercises}
+          trainingDate={trainingDate}
+          onStartTraining={() => router.push("/trainingMain/free")}
+        />
       </section>
 
       <TrainingSection
         title="자유 트레이닝"
         buttonText="자유 트레이닝 시작"
+        onButtonClick={() => router.push("/trainingMain/free")}
       />
 
       <TrainingSection

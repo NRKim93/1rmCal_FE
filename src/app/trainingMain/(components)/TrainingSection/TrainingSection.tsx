@@ -1,5 +1,6 @@
 "use client";
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/common/Button';
 
 interface TrainingSectionProps {
@@ -9,6 +10,16 @@ interface TrainingSectionProps {
 }
 
 export default function TrainingSection({ title, buttonText, onButtonClick }: TrainingSectionProps) {
+  const router = useRouter();
+
+  const handleClick = () => {
+    if (onButtonClick) return onButtonClick();
+
+    if (title.includes('자유') || buttonText.includes('자유')) {
+      router.push('/trainingMain/free');
+    }
+  };
+
   return (
     <section className="px-5 pb-5">
       <h2 className="mb-4 text-lg text-gray-800">{title}</h2>
@@ -17,7 +28,7 @@ export default function TrainingSection({ title, buttonText, onButtonClick }: Tr
           variant="outline"
           size="md"
           fullWidth
-          onClick={onButtonClick}
+          onClick={handleClick}
           className="border-0 bg-gray-300 text-black"
         >
           {buttonText}
