@@ -155,7 +155,7 @@
             }                                                                                                                         
                                                                                                                                       
             # 실행 중인 앱 중지                                                                                                       
-            pm2 delete \$env:UMPC_APP_NAME 2>\$null                                                                                   
+            pm2 delete $env:UMPC_APP_NAME 2>$null; $LASTEXITCODE = 0                                                                                
                                                                                                                                       
             # 백업                                                                                                                    
             if (Test-Path \$appDir) {                                                                                                 
