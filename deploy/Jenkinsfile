@@ -1,210 +1,210 @@
- pipeline {                                                                                                                          
-    agent any                                                                                                                         
-                                                                                                                                      
-    options {                                                                                                                         
-      timestamps()                                                                                                                    
-    }                                                                                                                                 
-                                                                                                                                      
-    parameters {                                                                                                                      
-      booleanParam(                                                                                                                   
-        name: 'CLEAN_BUILD',                                                                                                          
-        defaultValue: true,                                                                                                           
-        description: '클린 빌드 (node_modules/.next/out 삭제 후 빌드)'                                                                
-      )                                                                                                                               
-    }                                                                                                                                 
-                                                                                                                                      
-    environment {                                                                                                                     
-      PROJECT_NAME = 'THE_GYM_FE'                                                                                                     
-      DEPLOY_ENV   = 'dev'                                                                                                            
-                                                                                                                                      
-      // GitHub                                                                                                                       
-      GIT_REPO_URL = 'https://github.com/NRKim93/1rmCal_FE.git'                                                                       
-      GIT_BRANCH   = 'main'                                                                                                           
-      GIT_CREDENTIALS_ID = 'github-pat-jenkins'
-                                                                                                                                      
-      // UMPC (Windows) local deploy                                                                                                  
-      UMPC_APP_DIR_WIN = 'C:\\apps\\the-gym-fe'                                                                                       
-      UMPC_APP_NAME    = 'the-gym-fe'                                                                                                 
-      APP_PORT         = '3000'                                                                                                       
-                                                                                                                                      
-      ARTIFACT_NAME = 'deploy_bundle.tar.gz'                                                                                          
-    }                                                                                                                                 
-                                                                                                                                      
-    stages {                                                                                                                          
-      stage('Clean Workspace') {                                                                                                      
-        steps { cleanWs() }                                                                                                           
-      }                                                                                                                               
-                                                                                                                                      
-      stage('Checkout Source (GitHub)') {                                                                                             
-        steps {                                                                                                                       
-          echo "Checkout: ${env.GIT_REPO_URL} (${env.GIT_BRANCH})"                                                                    
-          checkout([                                                                                                                  
-            $class: 'GitSCM',                                                                                                         
-            branches: [[name: "*/${env.GIT_BRANCH}"]],                                                                                
-            userRemoteConfigs: [[                                                                                                     
-              url: env.GIT_REPO_URL,
-              credentialsId: env.GIT_CREDENTIALS_ID
-            ]]                                                                                                                        
-          ])                                                                                                                          
-        }                                                                                                                             
-      }                                                                                                                               
-                                                                                                                                      
-      stage('Install & Build Next.js (Windows)') {                                                                                    
-        steps {                                                                                                                       
-          script {                                                                                                                    
-            def cleanFlag = params.CLEAN_BUILD ? '$true' : '$false'                                                                   
-            powershell """
-              \$ErrorActionPreference = 'Stop'                                                                                        
-                                                                                                                                      
-              \$cleanBuild = ${cleanFlag}                                                                                             
-              if (\$cleanBuild) {                                                                                                     
-                Write-Host 'CLEAN_BUILD enabled: removing node_modules and build outputs'                                             
-                foreach (\$p in @('node_modules', '.next', 'out')) {                                                                  
-                  if (Test-Path \$p) { Remove-Item -Recurse -Force \$p }                                                              
-                }                                                                                                                     
-              }                                                                                                                       
-                                                                                                                                      
-              node -v                                                                                                                 
-              npm -v                                                                                                                  
-              npm ci                                                                                                                  
-              npm run build                                                                                                           
-                                                                                                                                      
-              if (!(Test-Path '.next\\standalone')) { throw 'Missing .next\\standalone (enable output: standalone?)' }                
-              if (!(Test-Path '.next\\static')) { throw 'Missing .next\\static' }                                                     
-            """                                                                                                                       
-          }                                                                                                                           
-        }                                                                                                                             
-      }                                                                                                                               
-                                                                                                                                      
-      stage('Package Artifact (Windows)') {                                                                                           
-        steps {                                                                                                                       
-          powershell """                                                                                                              
-            \$ErrorActionPreference = 'Stop'                                                                                          
-                                                                                                                                      
-            if (Test-Path 'deploy_bundle') { Remove-Item -Recurse -Force 'deploy_bundle' }                                            
-            New-Item -ItemType Directory -Force -Path 'deploy_bundle' | Out-Null                                                      
-                                                                                                                                      
-            # standalone 서버 파일                                                                                                    
-            Copy-Item -Recurse -Force '.next\\standalone\\*' 'deploy_bundle\\'                                                        
-                                                                                                                                      
-            # static 리소스
-            New-Item -ItemType Directory -Force -Path 'deploy_bundle\\.next' | Out-Null                                               
-            Copy-Item -Recurse -Force '.next\\static' 'deploy_bundle\\.next\\static'                                                  
-                                                                                                                                      
-            # public                                                                                                                  
-            if (Test-Path 'public') {                                                                                                 
-              Copy-Item -Recurse -Force 'public' 'deploy_bundle\\public'                                                              
-            }                                                                                                                         
-                                                                                                                                      
-            # pm2 ecosystem (avoid PowerShell here-string terminator indentation issues in Jenkins)                                    
-            \$ecosystem = @(                                                                                                          
-              'module.exports = {',                                                                                                   
-              '  apps: [',                                                                                                            
-              '    {',                                                                                                                
-              ('      name: "' + \$env:UMPC_APP_NAME + '",'),                                                                         
-              '      script: "server.js",',                                                                                           
-              '      env: {',                                                                                                         
-              '        NODE_ENV: "production",',                                                                                      
-              ('        PORT: "' + \$env:APP_PORT + '"'),                                                                             
-              '      }',                                                                                                              
-              '    }',                                                                                                                
-              '  ]',                                                                                                                  
-              '}'                                                                                                                     
-            ) -join "`n"                                                                                                              
-            \$ecosystem | Out-File -FilePath 'deploy_bundle\\ecosystem.config.cjs' -Encoding utf8 -Force                              
-                                                                                                                                      
-            if (Test-Path \$env:ARTIFACT_NAME) { Remove-Item -Force \$env:ARTIFACT_NAME }                                             
-            tar -czf \$env:ARTIFACT_NAME -C deploy_bundle .                                                                           
-                                                                                                                                      
-            if (!(Test-Path \$env:ARTIFACT_NAME)) { throw "Artifact not created: \$($env:ARTIFACT_NAME)" }                            
-            Get-Item \$env:ARTIFACT_NAME | Format-List Name,Length,LastWriteTime                                                      
-          """                                                                                                                         
-        }                                                                                                                             
-      }                                                                                                                               
-                                                                                                                                      
-      stage('Deploy on UMPC (Windows Local)') {                                                                                       
-        steps {                                                                                                                       
-          powershell """                                                                                                              
-            \$ErrorActionPreference = 'Stop'                                                                                          
-                                                                                                                                     
-            # Jenkins Windows service sometimes lacks HOME/HOMEPATH; pm2 requires a valid home directory                              
-            if (-not \$env:HOME -or -not \$env:HOMEPATH -or -not \$env:USERPROFILE) {                                                 
-              \$homeDir = Join-Path \$env:TEMP 'jenkins_home'                                                                         
-              New-Item -ItemType Directory -Force -Path \$homeDir | Out-Null                                                          
-              \$env:HOME = \$homeDir                                                                                                  
-              \$env:USERPROFILE = \$homeDir                                                                                           
-              \$env:HOMEDRIVE = (Split-Path -Qualifier \$homeDir).TrimEnd('\\\\')                                                     
-              \$env:HOMEPATH = (Split-Path -NoQualifier \$homeDir)                                                                    
-            }                                                                                                                         
-            if (-not \$env:PM2_HOME) { \$env:PM2_HOME = 'C:\\\\etc\\\\.pm2' }                                                         
-                                                                                                                                     
-            \$bundle = Join-Path (Get-Location) \$env:ARTIFACT_NAME                                                                   
-            if (!(Test-Path \$bundle)) { throw "Missing artifact: \$bundle" }                                                         
-                                                                                                                                      
-            \$appDir = \$env:UMPC_APP_DIR_WIN                                                                                         
-            \$tmpDir = Join-Path \$env:TEMP "${env:UMPC_APP_NAME}_new"                                                                
-                                                                                                                                      
-            if (Test-Path \$tmpDir) { Remove-Item -Recurse -Force \$tmpDir }                                                          
-            New-Item -ItemType Directory -Force -Path \$tmpDir | Out-Null                                                             
-                                                                                                                                      
-            tar -xzf \$bundle -C \$tmpDir                                                                                             
-                                                                                                                                      
-            # pm2 설치 (없으면)                                                                                                       
-            if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) {                                                               
-              npm i -g pm2                                                                                                            
-            }                                                                                                                         
-                                                                                                                                      
-            # 실행 중인 앱 중지                                                                                                       
-            pm2 delete \$env:UMPC_APP_NAME 2>\$null; \$LASTEXITCODE = 0                                                                                
-                                                                                                                                      
-            # 백업                                                                                                                    
-            if (Test-Path \$appDir) {                                                                                                 
-              \$bk = "\${appDir}.backup.\$(Get-Date -Format yyyyMMdd_HHmmss)"                                                         
-              Move-Item -Force \$appDir \$bk                                                                                          
-            }                                                                                                                         
-                                                                                                                                      
-            New-Item -ItemType Directory -Force -Path \$appDir | Out-Null                                                             
-            Copy-Item -Recurse -Force "\$tmpDir\\*" \$appDir                                                                          
-                                                                                                                                      
-            Set-Location \$appDir                                                                                                     
-            \$env:PORT = \$env:APP_PORT
-                                                                                                                                      
-            if (Test-Path '.\\ecosystem.config.cjs') {                                                                                
-              pm2 start ecosystem.config.cjs                                                                                          
-            } else {                                                                                                                  
-              pm2 start server.js --name \$env:UMPC_APP_NAME                                                                          
-            }                                                                                                                         
-                                                                                                                                      
-            pm2 save                                                                                                                  
-            pm2 status                                                                                                                
-          """                                                                                                                         
-        }                                                                                                                             
-      }                                                                                                                               
-                                                                                                                                      
-      stage('Smoke Check') {                                                                                                          
-        steps {                                                                                                                       
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+  }
+
+  parameters {
+    booleanParam(
+      name: 'CLEAN_BUILD',
+      defaultValue: true,
+      description: 'Clean build (remove node_modules/.next/out)'
+    )
+  }
+
+  environment {
+    PROJECT_NAME = 'THE_GYM_FE'
+    DEPLOY_ENV = 'dev'
+
+    // GitHub
+    GIT_REPO_URL = 'https://github.com/NRKim93/1rmCal_FE.git'
+    GIT_BRANCH = 'main'
+    GIT_CREDENTIALS_ID = 'github-pat-jenkins'
+
+    // UMPC (Windows) local deploy
+    UMPC_APP_DIR_WIN = 'C:\\apps\\the-gym-fe'
+    UMPC_APP_NAME = 'the-gym-fe'
+    APP_PORT = '3000'
+
+    ARTIFACT_NAME = 'deploy_bundle.tar.gz'
+  }
+
+  stages {
+    stage('Clean Workspace') {
+      steps { cleanWs() }
+    }
+
+    stage('Checkout Source (GitHub)') {
+      steps {
+        echo "Checkout: ${env.GIT_REPO_URL} (${env.GIT_BRANCH})"
+        checkout([
+          $class: 'GitSCM',
+          branches: [[name: "*/${env.GIT_BRANCH}"]],
+          userRemoteConfigs: [[
+            url: env.GIT_REPO_URL,
+            credentialsId: env.GIT_CREDENTIALS_ID
+          ]]
+        ])
+      }
+    }
+
+    stage('Install & Build Next.js (Windows)') {
+      steps {
+        script {
+          def cleanFlag = params.CLEAN_BUILD ? '$true' : '$false'
           powershell """
-            \$ErrorActionPreference = 'Continue'                                                                                      
-            try {                                                                                                                     
-              \$url = "http://localhost:\$($env:APP_PORT)/"                                                                           
-              Write-Host "Smoke check: \$url"                                                                                         
-              iwr \$url -UseBasicParsing -TimeoutSec 5 | Out-Null                                                                     
-              Write-Host 'OK'                                                                                                         
-            } catch {                                                                                                                 
-              Write-Host "Smoke check skipped/failed: \$($_.Exception.Message)"                                                       
-            }                                                                                                                         
-          """                                                                                                                         
-        }                                                                                                                             
-      }                                                                                                                               
-                                                                                                                                      
-      stage('Clean Workspace (after)') {                                                                                              
-        steps { cleanWs() }                                                                                                           
-      }                                                                                                                               
-    }                                                                                                                                 
-                                                                                                                                      
-    post {                                                                                                                            
-      always { echo 'Pipeline finished.' }                                                                                            
-      success { echo '✅ Deploy succeeded.' }                                                                                         
-      failure { echo '❌ Deploy failed.' }                                                                                            
-    }                                                                                                                                 
-  }    
+            \$ErrorActionPreference = 'Stop'
+
+            \$cleanBuild = ${cleanFlag}
+            if (\$cleanBuild) {
+              Write-Host 'CLEAN_BUILD enabled: removing node_modules and build outputs'
+              foreach (\$p in @('node_modules', '.next', 'out')) {
+                if (Test-Path \$p) { Remove-Item -Recurse -Force \$p }
+              }
+            }
+
+            node -v
+            npm -v
+            npm ci
+            npm run build
+
+            if (!(Test-Path '.next\\standalone')) { throw 'Missing .next\\standalone (enable output: standalone?)' }
+            if (!(Test-Path '.next\\static')) { throw 'Missing .next\\static' }
+          """
+        }
+      }
+    }
+
+    stage('Package Artifact (Windows)') {
+      steps {
+        powershell """
+          \$ErrorActionPreference = 'Stop'
+
+          if (Test-Path 'deploy_bundle') { Remove-Item -Recurse -Force 'deploy_bundle' }
+          New-Item -ItemType Directory -Force -Path 'deploy_bundle' | Out-Null
+
+          # standalone server files
+          Copy-Item -Recurse -Force '.next\\standalone\\*' 'deploy_bundle\\'
+
+          # static resources
+          New-Item -ItemType Directory -Force -Path 'deploy_bundle\\.next' | Out-Null
+          Copy-Item -Recurse -Force '.next\\static' 'deploy_bundle\\.next\\static'
+
+          # public
+          if (Test-Path 'public') {
+            Copy-Item -Recurse -Force 'public' 'deploy_bundle\\public'
+          }
+
+          # pm2 ecosystem (avoid PowerShell here-string terminator indentation issues in Jenkins)
+          \$ecosystem = @(
+            'module.exports = {',
+            '  apps: [',
+            '    {',
+            ('      name: \"' + \$env:UMPC_APP_NAME + '\",'),
+            '      script: \"server.js\",',
+            '      env: {',
+            '        NODE_ENV: \"production\",',
+            ('        PORT: \"' + \$env:APP_PORT + '\"'),
+            '      }',
+            '    }',
+            '  ]',
+            '}'
+          ) -join \"`n\"
+          \$ecosystem | Out-File -FilePath 'deploy_bundle\\ecosystem.config.cjs' -Encoding utf8 -Force
+
+          if (Test-Path \$env:ARTIFACT_NAME) { Remove-Item -Force \$env:ARTIFACT_NAME }
+          tar -czf \$env:ARTIFACT_NAME -C deploy_bundle .
+
+          if (!(Test-Path \$env:ARTIFACT_NAME)) { throw \"Artifact not created: \$($env:ARTIFACT_NAME)\" }
+          Get-Item \$env:ARTIFACT_NAME | Format-List Name,Length,LastWriteTime
+        """
+      }
+    }
+
+    stage('Deploy on UMPC (Windows Local)') {
+      steps {
+        powershell """
+          \$ErrorActionPreference = 'Stop'
+
+          # Jenkins Windows service sometimes lacks HOME/HOMEPATH; pm2 requires a valid home directory
+          if (-not \$env:HOME -or -not \$env:HOMEPATH -or -not \$env:USERPROFILE) {
+            \$homeDir = Join-Path \$env:TEMP 'jenkins_home'
+            New-Item -ItemType Directory -Force -Path \$homeDir | Out-Null
+            \$env:HOME = \$homeDir
+            \$env:USERPROFILE = \$homeDir
+            \$env:HOMEDRIVE = (Split-Path -Qualifier \$homeDir).TrimEnd('\\\\')
+            \$env:HOMEPATH = (Split-Path -NoQualifier \$homeDir)
+          }
+          if (-not \$env:PM2_HOME) { \$env:PM2_HOME = 'C:\\\\etc\\\\.pm2' }
+
+          \$bundle = Join-Path (Get-Location) \$env:ARTIFACT_NAME
+          if (!(Test-Path \$bundle)) { throw \"Missing artifact: \$bundle\" }
+
+          \$appDir = \$env:UMPC_APP_DIR_WIN
+          \$tmpDir = Join-Path \$env:TEMP \"${env:UMPC_APP_NAME}_new\"
+
+          if (Test-Path \$tmpDir) { Remove-Item -Recurse -Force \$tmpDir }
+          New-Item -ItemType Directory -Force -Path \$tmpDir | Out-Null
+
+          tar -xzf \$bundle -C \$tmpDir
+
+          # install pm2 if missing
+          if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) {
+            npm i -g pm2
+          }
+
+          # stop running app (ignore if missing)
+          cmd /c \"pm2 delete %UMPC_APP_NAME% >NUL 2>&1 & exit /b 0\"
+
+          # backup
+          if (Test-Path \$appDir) {
+            \$bk = \"\${appDir}.backup.\$(Get-Date -Format yyyyMMdd_HHmmss)\"
+            Move-Item -Force \$appDir \$bk
+          }
+
+          New-Item -ItemType Directory -Force -Path \$appDir | Out-Null
+          Copy-Item -Recurse -Force \"\$tmpDir\\*\" \$appDir
+
+          Set-Location \$appDir
+          \$env:PORT = \$env:APP_PORT
+
+          if (Test-Path '.\\ecosystem.config.cjs') {
+            pm2 start ecosystem.config.cjs
+          } else {
+            pm2 start server.js --name \$env:UMPC_APP_NAME
+          }
+
+          pm2 save
+          pm2 status
+        """
+      }
+    }
+
+    stage('Smoke Check') {
+      steps {
+        powershell """
+          \$ErrorActionPreference = 'Continue'
+          try {
+            \$url = \"http://localhost:\$($env:APP_PORT)/\"
+            Write-Host \"Smoke check: \$url\"
+            iwr \$url -UseBasicParsing -TimeoutSec 5 | Out-Null
+            Write-Host 'OK'
+          } catch {
+            Write-Host \"Smoke check skipped/failed: \$($_.Exception.Message)\"
+          }
+        """
+      }
+    }
+
+    stage('Clean Workspace (after)') {
+      steps { cleanWs() }
+    }
+  }
+
+  post {
+    always { echo 'Pipeline finished.' }
+    success { echo '✅ Deploy succeeded.' }
+    failure { echo '❌ Deploy failed.' }
+  }
+}
