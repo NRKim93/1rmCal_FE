@@ -128,85 +128,67 @@ pipeline {
     }
 
     stage('Deploy to UMPC over SSH') {
-      steps {
-        withCredentials([sshUserPrivateKey(credentialsId: "${env.UMPC_SSH_CRED_ID}",
-                                           keyFileVariable: 'SSH_KEY',
-                                           usernameVariable: 'SSH_USER')]) {
-          powershell """
-            \$ErrorActionPreference = 'Stop'
-            chcp 65001 | Out-Null
-            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+  steps {
+    withCredentials([sshUserPrivateKey(
+      credentialsId: "${env.UMPC_SSH_CRED_ID}",
+      keyFileVariable: 'SSH_KEY',
+      usernameVariable: 'SSH_USER'
+    )]) {
+      powershell """
+        \$ErrorActionPreference = 'Stop'
+        chcp 65001 | Out-Null
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-            \$umpcHost  = '${env.UMPC_HOST}'
-            \$remoteTmp = '${env.REMOTE_TMP}'
-            \$appDir    = '${env.UMPC_APP_DIR}'
-            \$appName   = '${env.UMPC_APP_NAME}'
-            \$port      = '${env.APP_PORT}'
-            \$artifact  = '${env.ARTIFACT_NAME}'
-            \$key       = \$env:SSH_KEY
-            \$user      = \$env:SSH_USER
+        \$umpcHost  = '${env.UMPC_HOST}'
+        \$remoteTmp = '${env.REMOTE_TMP}'
+        \$appDir    = '${env.UMPC_APP_DIR}'
+        \$appName   = '${env.UMPC_APP_NAME}'
+        \$port      = '${env.APP_PORT}'
+        \$artifact  = '${env.ARTIFACT_NAME}'
 
-            # 1) UMPC에 디렉토리 생성 (tmp + app)
-            cmd /c \"ssh -i \\\"\$key\\\" -o StrictHostKeyChecking=no \$user@\$umpcHost \\\"powershell -NoProfile -ExecutionPolicy Bypass -Command \\\\\\\"New-Item -ItemType Directory -Force -Path '\$remoteTmp' | Out-Null; New-Item -ItemType Directory -Force -Path '\$appDir' | Out-Null\\\\\\\"\\\"\"
+        \$key  = \$env:SSH_KEY
+        \$user = \$env:SSH_USER
 
-            # 2) 아티팩트 업로드 -> C:/temp/the-gym-fe/deploy_bundle.tar.gz
-            \$remoteTgz = \"\$remoteTmp/\$artifact\"
-            cmd /c \"scp -i \\\"\$key\\\" -o StrictHostKeyChecking=no \\\"\$artifact\\\" \$user@\$umpcHost:\\\"\$remoteTgz\\\"\"
+        # user@host 를 PowerShell 파서가 오해하지 않게 변수로 확정
+        \$dest = \"\$user@\$umpcHost\"
+        \$remoteTgz = \"\$remoteTmp/\$artifact\"
 
-            # 3) 원격 배포 스크립트(따옴표 지옥 방지: Base64 인코딩)
-            \$remoteScript = @\"
-\$ErrorActionPreference = 'Stop'
-chcp 65001 | Out-Null
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        # 1) UMPC에 tmp/app 폴더 생성
+        cmd /c \"ssh -i \\\"\$key\\\" -o StrictHostKeyChecking=no \$dest powershell -NoProfile -ExecutionPolicy Bypass -Command \\\"New-Item -ItemType Directory -Force -Path '\$remoteTmp' ^| Out-Null; New-Item -ItemType Directory -Force -Path '\$appDir' ^| Out-Null\\\"\"
 
-\$tmp     = '${env.REMOTE_TMP}'
-\$appDir  = '${env.UMPC_APP_DIR}'
-\$name    = '${env.UMPC_APP_NAME}'
-\$port    = '${env.APP_PORT}'
-\$bundle  = Join-Path \$tmp '${env.ARTIFACT_NAME}'
+        # 2) 아티팩트 업로드 (중요: scp 목적지는 따옴표로 감싸지 말고, PowerShell 변수경계 확실히)
+        cmd /c \"scp -i \\\"\$key\\\" -o StrictHostKeyChecking=no \\\"\$artifact\\\" \$dest:\$remoteTgz\"
 
-if (!(Test-Path \$bundle)) { throw ('bundle missing: ' + \$bundle) }
+        # 3) 원격 실행 스크립트: here-string 없이 라인배열로 구성 → Base64(UTF-16LE)
+        \$lines = @(
+          '\$ErrorActionPreference = ''Stop''',
+          'chcp 65001 | Out-Null',
+          '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+          \"\$tmp='${env.REMOTE_TMP}'\",
+          \"\$appDir='${env.UMPC_APP_DIR}'\",
+          \"\$name='${env.UMPC_APP_NAME}'\",
+          \"\$port='${env.APP_PORT}'\",
+          \"\$bundle=Join-Path \$tmp '${env.ARTIFACT_NAME}'\",
+          'if (!(Test-Path \$bundle)) { throw (''bundle missing: '' + \$bundle) }',
+          'if (Test-Path \$appDir) { \$bk=\"\$appDir.backup.\$(Get-Date -Format yyyyMMdd_HHmmss)\"; Move-Item -Force \$appDir \$bk }',
+          'New-Item -ItemType Directory -Force -Path \$appDir | Out-Null',
+          'tar -xzf \$bundle -C \$appDir',
+          'if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) { npm i -g pm2 }',
+          'Set-Location \$appDir',
+          '\$env:PORT=\$port',
+          'cmd /c \"pm2 delete \"\$name\" >NUL 2>&1\"',
+          'if (Test-Path ''.\\\\ecosystem.config.cjs'') { pm2 start ecosystem.config.cjs } else { pm2 start server.js --name \$name }',
+          'pm2 save',
+          'pm2 ls --no-color'
+        )
+        \$remoteScript = (\$lines -join \"`n\")
+        \$b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(\$remoteScript))
 
-# 백업 후 교체 (폴더 전체 교체)
-if (Test-Path \$appDir) {
-  \$bk = \"\$appDir.backup.\$(Get-Date -Format yyyyMMdd_HHmmss)\"
-  Move-Item -Force \$appDir \$bk
-}
-New-Item -ItemType Directory -Force -Path \$appDir | Out-Null
-
-# 압축 해제
-tar -xzf \$bundle -C \$appDir
-
-# pm2 설치(없으면) - UMPC에 node/npm 설치되어 있어야 함
-if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) {
-  npm i -g pm2
-}
-
-Set-Location \$appDir
-\$env:PORT = \$port
-
-# 재시작 (없으면 무시)
-cmd /c \"pm2 delete \$name >NUL 2>&1\"
-
-if (Test-Path '.\\\\ecosystem.config.cjs') {
-  pm2 start ecosystem.config.cjs
-} else {
-  pm2 start server.js --name \$name
-}
-
-pm2 save
-pm2 ls --no-color
-\"
-
-            # PowerShell -EncodedCommand 는 UTF-16LE Base64
-            \$bytes = [System.Text.Encoding]::Unicode.GetBytes(\$remoteScript)
-            \$b64   = [Convert]::ToBase64String(\$bytes)
-
-            cmd /c \"ssh -i \\\"\$key\\\" -o StrictHostKeyChecking=no \$user@\$umpcHost \\\"powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand \$b64\\\"\"
-          """
-        }
-      }
+        cmd /c \"ssh -i \\\"\$key\\\" -o StrictHostKeyChecking=no \$dest powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand \$b64\"
+      """
     }
+  }
+}
 
     stage('Smoke Check (from Jenkins)') {
       steps {
