@@ -136,7 +136,7 @@ pipeline {
 
             \$key      = \$env:SSH_KEY
             \$user     = \$env:SSH_USER
-            \$host     = '${env.UMPC_HOST}'
+            \$umpcHost     = '${env.UMPC_HOST}'
             \$artifact = '${env.ARTIFACT_NAME}'
 
             \$remoteTmp = '${env.REMOTE_TMP}'
@@ -144,7 +144,7 @@ pipeline {
             \$appName   = '${env.UMPC_APP_NAME}'
             \$port      = '${env.APP_PORT}'
 
-            \$dest = \"\$user@\$host\"
+            \$dest = \"\$user@\$umpcHost\"
             \$remoteTgz = \"\$remoteTmp/\$artifact\"
 
             # 1) 원격 폴더 준비
