@@ -20,6 +20,7 @@
       // GitHub                                                                                                                       
       GIT_REPO_URL = 'https://github.com/NRKim93/1rmCal_FE.git'                                                                       
       GIT_BRANCH   = 'main'                                                                                                           
+      GIT_CREDENTIALS_ID = 'github-pat-jenkins'
                                                                                                                                       
       // UMPC (Windows) local deploy                                                                                                  
       UMPC_APP_DIR_WIN = 'C:\\apps\\the-gym-fe'                                                                                       
@@ -41,7 +42,8 @@
             $class: 'GitSCM',                                                                                                         
             branches: [[name: "*/${env.GIT_BRANCH}"]],                                                                                
             userRemoteConfigs: [[                                                                                                     
-              url: env.GIT_REPO_URL                                                                                                   
+              url: env.GIT_REPO_URL,
+              credentialsId: env.GIT_CREDENTIALS_ID
             ]]                                                                                                                        
           ])                                                                                                                          
         }                                                                                                                             
