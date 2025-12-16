@@ -158,14 +158,14 @@ pipeline {
           # Run pm2 via a detached process with redirected stdout/stderr.
           # When pm2 needs to spawn its daemon, the daemon inherits these handles (not Jenkins),
           # preventing the PowerShell step from hanging.
-          \$pm2Out = Join-Path \$env:TEMP \"pm2_\$($env:UMPC_APP_NAME)_out.log\"
-          \$pm2Err = Join-Path \$env:TEMP \"pm2_\$($env:UMPC_APP_NAME)_err.log\"
+          \$pm2Out = Join-Path \$env:TEMP \"pm2_\$(\$env:UMPC_APP_NAME)_out.log\"
+          \$pm2Err = Join-Path \$env:TEMP \"pm2_\$(\$env:UMPC_APP_NAME)_err.log\"
 
           function Invoke-Pm2([string]\$argsLine, [bool]\$allowFailure = \$false) {
             \$cmdLine = \"pm2 \$argsLine 1>> `\"\$pm2Out`\" 2>> `\"\$pm2Err`\"\"
             \$proc = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c', \$cmdLine) -NoNewWindow -Wait -PassThru
             if (-not \$allowFailure -and \$proc.ExitCode -ne 0) {
-              throw \"pm2 failed (exit=\$($proc.ExitCode)): \$argsLine`nSTDERR:`n\$([IO.File]::ReadAllText(\$pm2Err))\"
+              throw \"pm2 failed (exit=\$(\$proc.ExitCode)): \$argsLine`nSTDERR:`n\$([IO.File]::ReadAllText(\$pm2Err))\"
             }
             \$global:LASTEXITCODE = 0
           }
