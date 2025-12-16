@@ -96,21 +96,21 @@
               Copy-Item -Recurse -Force 'public' 'deploy_bundle\\public'                                                              
             }                                                                                                                         
                                                                                                                                       
-            # pm2 ecosystem                                                                                                           
-            \$ecosystem = @"                                                                                                          
-  module.exports = {                                                                                                                  
-    apps: [                                                                                                                           
-      {                                                                                                                               
-        name: "${env:UMPC_APP_NAME}",                                                                                                 
-        script: "server.js",                                                                                                          
-        env: {                                                                                                                        
-          NODE_ENV: "production",                                                                                                     
-          PORT: "${env:APP_PORT}"                                                                                                     
-        }                                                                                                                             
-      }                                                                                                                               
-    ]                                                                                                                                 
-  }                                                                                                                                   
-  "@                                                                                                                                  
+            # pm2 ecosystem (avoid PowerShell here-string terminator indentation issues in Jenkins)                                    
+            \$ecosystem = @(                                                                                                          
+              'module.exports = {',                                                                                                   
+              '  apps: [',                                                                                                            
+              '    {',                                                                                                                
+              ('      name: "' + \$env:UMPC_APP_NAME + '",'),                                                                         
+              '      script: "server.js",',                                                                                           
+              '      env: {',                                                                                                         
+              '        NODE_ENV: "production",',                                                                                      
+              ('        PORT: "' + \$env:APP_PORT + '"'),                                                                             
+              '      }',                                                                                                              
+              '    }',                                                                                                                
+              '  ]',                                                                                                                  
+              '}'                                                                                                                     
+            ) -join "`n"                                                                                                              
             \$ecosystem | Out-File -FilePath 'deploy_bundle\\ecosystem.config.cjs' -Encoding utf8 -Force                              
                                                                                                                                       
             if (Test-Path \$env:ARTIFACT_NAME) { Remove-Item -Force \$env:ARTIFACT_NAME }                                             
