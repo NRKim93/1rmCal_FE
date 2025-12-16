@@ -124,7 +124,7 @@ pipeline {
 
     stage('Deploy on UMPC (Windows Local)') {
       steps {
-        timeout(time: 3, unit: 'MINUTES') {
+        timeout(time: 5, unit: 'MINUTES') {
           powershell """
           \$ErrorActionPreference = 'Stop'
 
@@ -155,8 +155,23 @@ pipeline {
             npm i -g pm2
           }
 
+          # Run pm2 via a detached process with redirected stdout/stderr.
+          # When pm2 needs to spawn its daemon, the daemon inherits these handles (not Jenkins),
+          # preventing the PowerShell step from hanging.
+          \$pm2Out = Join-Path \$env:TEMP \"pm2_\$($env:UMPC_APP_NAME)_out.log\"
+          \$pm2Err = Join-Path \$env:TEMP \"pm2_\$($env:UMPC_APP_NAME)_err.log\"
+
+          function Invoke-Pm2([string]\$argsLine, [bool]\$allowFailure = \$false) {
+            \$cmdLine = \"pm2 \$argsLine 1>> `\"\$pm2Out`\" 2>> `\"\$pm2Err`\"\"
+            \$proc = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c', \$cmdLine) -NoNewWindow -Wait -PassThru
+            if (-not \$allowFailure -and \$proc.ExitCode -ne 0) {
+              throw \"pm2 failed (exit=\$($proc.ExitCode)): \$argsLine`nSTDERR:`n\$([IO.File]::ReadAllText(\$pm2Err))\"
+            }
+            \$global:LASTEXITCODE = 0
+          }
+
           # stop running app (ignore if missing)
-          cmd /c \"pm2 delete %UMPC_APP_NAME% >NUL 2>&1 & exit /b 0\"
+          Invoke-Pm2 \"delete %UMPC_APP_NAME%\" \$true
 
           # backup
           if (Test-Path \$appDir) {
@@ -171,16 +186,16 @@ pipeline {
           \$env:PORT = \$env:APP_PORT
 
           if (Test-Path '.\\ecosystem.config.cjs') {
-            pm2 start ecosystem.config.cjs
+            Invoke-Pm2 'start ecosystem.config.cjs'
           } else {
-            pm2 start server.js --name \$env:UMPC_APP_NAME
+            Invoke-Pm2 \"start server.js --name %UMPC_APP_NAME%\"
           }
 
           Write-Host 'pm2 save...'
-          pm2 save
+          Invoke-Pm2 'save'
 
-          Write-Host 'pm2 ls (no color)...'
-          pm2 ls --no-color
+          Write-Host 'pm2 list...'
+          Invoke-Pm2 'ls --no-color'
 
           Write-Host 'Deploy stage completed.'
           exit 0
