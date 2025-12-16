@@ -124,7 +124,8 @@ pipeline {
 
     stage('Deploy on UMPC (Windows Local)') {
       steps {
-        powershell """
+        timeout(time: 3, unit: 'MINUTES') {
+          powershell """
           \$ErrorActionPreference = 'Stop'
 
           # Jenkins Windows service sometimes lacks HOME/HOMEPATH; pm2 requires a valid home directory
@@ -175,9 +176,16 @@ pipeline {
             pm2 start server.js --name \$env:UMPC_APP_NAME
           }
 
+          Write-Host 'pm2 save...'
           pm2 save
-          pm2 status
+
+          Write-Host 'pm2 ls (no color)...'
+          pm2 ls --no-color
+
+          Write-Host 'Deploy stage completed.'
+          exit 0
         """
+        }
       }
     }
 
