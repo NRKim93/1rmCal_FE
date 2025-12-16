@@ -126,7 +126,18 @@
         steps {                                                                                                                       
           powershell """                                                                                                              
             \$ErrorActionPreference = 'Stop'                                                                                          
-                                                                                                                                      
+                                                                                                                                     
+            # Jenkins Windows service sometimes lacks HOME/HOMEPATH; pm2 requires a valid home directory                              
+            if (-not \$env:HOME -or -not \$env:HOMEPATH -or -not \$env:USERPROFILE) {                                                 
+              \$homeDir = Join-Path \$env:TEMP 'jenkins_home'                                                                         
+              New-Item -ItemType Directory -Force -Path \$homeDir | Out-Null                                                          
+              \$env:HOME = \$homeDir                                                                                                  
+              \$env:USERPROFILE = \$homeDir                                                                                           
+              \$env:HOMEDRIVE = (Split-Path -Qualifier \$homeDir).TrimEnd('\\\\')                                                     
+              \$env:HOMEPATH = (Split-Path -NoQualifier \$homeDir)                                                                    
+            }                                                                                                                         
+            if (-not \$env:PM2_HOME) { \$env:PM2_HOME = 'C:\\\\etc\\\\.pm2' }                                                         
+                                                                                                                                     
             \$bundle = Join-Path (Get-Location) \$env:ARTIFACT_NAME                                                                   
             if (!(Test-Path \$bundle)) { throw "Missing artifact: \$bundle" }                                                         
                                                                                                                                       
