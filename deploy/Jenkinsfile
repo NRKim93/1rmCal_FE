@@ -1,9 +1,7 @@
 pipeline {
   agent any
 
-  options {
-    timestamps()
-  }
+  options { timestamps() }
 
   parameters {
     booleanParam(
@@ -14,20 +12,23 @@ pipeline {
   }
 
   environment {
-    PROJECT_NAME = 'THE_GYM_FE'
-    DEPLOY_ENV = 'dev'
-
     // GitHub
     GIT_REPO_URL = 'https://github.com/NRKim93/1rmCal_FE.git'
-    GIT_BRANCH = 'main'
+    GIT_BRANCH   = 'main'
     GIT_CREDENTIALS_ID = 'github-pat-jenkins'
 
-    // UMPC (Windows) local deploy
+    // Build output
+    ARTIFACT_NAME = 'deploy_bundle.tar.gz'
+    REMOTE_TMP    = 'C:/temp/the-gym-fe'          // UMPC 임시 디렉토리
+
+    // UMPC target
+    UMPC_HOST = '172.30.1.24'
     UMPC_APP_DIR_WIN = 'C:\\apps\\the-gym-fe'
     UMPC_APP_NAME = 'the-gym-fe'
     APP_PORT = '3000'
 
-    ARTIFACT_NAME = 'deploy_bundle.tar.gz'
+    // Jenkins SSH credential id (Jenkins > Credentials 에 추가)
+    UMPC_SSH_CRED_ID = 'umpc-ssh-key'
   }
 
   stages {
@@ -55,6 +56,8 @@ pipeline {
           def cleanFlag = params.CLEAN_BUILD ? '$true' : '$false'
           powershell """
             \$ErrorActionPreference = 'Stop'
+            chcp 65001 | Out-Null
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
             \$cleanBuild = ${cleanFlag}
             if (\$cleanBuild) {
@@ -69,6 +72,7 @@ pipeline {
             npm ci
             npm run build
 
+            # standalone을 쓰려면 next.config.js 에 output: 'standalone' 필요
             if (!(Test-Path '.next\\standalone')) { throw 'Missing .next\\standalone (enable output: standalone?)' }
             if (!(Test-Path '.next\\static')) { throw 'Missing .next\\static' }
           """
@@ -80,32 +84,31 @@ pipeline {
       steps {
         powershell """
           \$ErrorActionPreference = 'Stop'
+          chcp 65001 | Out-Null
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
           if (Test-Path 'deploy_bundle') { Remove-Item -Recurse -Force 'deploy_bundle' }
           New-Item -ItemType Directory -Force -Path 'deploy_bundle' | Out-Null
 
-          # standalone server files
           Copy-Item -Recurse -Force '.next\\standalone\\*' 'deploy_bundle\\'
 
-          # static resources
           New-Item -ItemType Directory -Force -Path 'deploy_bundle\\.next' | Out-Null
           Copy-Item -Recurse -Force '.next\\static' 'deploy_bundle\\.next\\static'
 
-          # public
           if (Test-Path 'public') {
             Copy-Item -Recurse -Force 'public' 'deploy_bundle\\public'
           }
 
-          # pm2 ecosystem (avoid PowerShell here-string terminator indentation issues in Jenkins)
+          # ecosystem file
           \$ecosystem = @(
             'module.exports = {',
             '  apps: [',
             '    {',
-            ('      name: \"' + \$env:UMPC_APP_NAME + '\",'),
+            ('      name: \"' + '${env.UMPC_APP_NAME}' + '\",'),
             '      script: \"server.js\",',
             '      env: {',
             '        NODE_ENV: \"production\",',
-            ('        PORT: \"' + \$env:APP_PORT + '\"'),
+            ('        PORT: \"' + '${env.APP_PORT}' + '\"'),
             '      }',
             '    }',
             '  ]',
@@ -113,108 +116,79 @@ pipeline {
           ) -join \"`n\"
           \$ecosystem | Out-File -FilePath 'deploy_bundle\\ecosystem.config.cjs' -Encoding utf8 -Force
 
-          if (Test-Path \$env:ARTIFACT_NAME) { Remove-Item -Force \$env:ARTIFACT_NAME }
-          tar -czf \$env:ARTIFACT_NAME -C deploy_bundle .
+          if (Test-Path '${env.ARTIFACT_NAME}') { Remove-Item -Force '${env.ARTIFACT_NAME}' }
+          tar -czf '${env.ARTIFACT_NAME}' -C deploy_bundle .
 
-          if (!(Test-Path \$env:ARTIFACT_NAME)) { throw \"Artifact not created: \$($env:ARTIFACT_NAME)\" }
-          Get-Item \$env:ARTIFACT_NAME | Format-List Name,Length,LastWriteTime
+          if (!(Test-Path '${env.ARTIFACT_NAME}')) { throw 'Artifact not created' }
+          Get-Item '${env.ARTIFACT_NAME}' | Format-List Name,Length,LastWriteTime
         """
       }
     }
 
-    stage('Deploy on UMPC (Windows Local)') {
+    stage('Deploy to UMPC over SSH') {
       steps {
-        timeout(time: 5, unit: 'MINUTES') {
+        withCredentials([sshUserPrivateKey(credentialsId: "${env.UMPC_SSH_CRED_ID}", keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
           powershell """
-          \$ErrorActionPreference = 'Stop'
+            \$ErrorActionPreference = 'Stop'
+            chcp 65001 | Out-Null
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-          # Jenkins Windows service sometimes lacks HOME/HOMEPATH; pm2 requires a valid home directory
-          if (-not \$env:HOME -or -not \$env:HOMEPATH -or -not \$env:USERPROFILE) {
-            \$homeDir = Join-Path \$env:TEMP 'jenkins_home'
-            New-Item -ItemType Directory -Force -Path \$homeDir | Out-Null
-            \$env:HOME = \$homeDir
-            \$env:USERPROFILE = \$homeDir
-            \$env:HOMEDRIVE = (Split-Path -Qualifier \$homeDir).TrimEnd('\\\\')
-            \$env:HOMEPATH = (Split-Path -NoQualifier \$homeDir)
-          }
-          if (-not \$env:PM2_HOME) { \$env:PM2_HOME = 'C:\\\\etc\\\\.pm2' }
+            \$host = '${env.UMPC_HOST}'
+            \$remoteTmp = '${env.REMOTE_TMP}'
+            \$artifact = '${env.ARTIFACT_NAME}'
 
-          \$bundle = Join-Path (Get-Location) \$env:ARTIFACT_NAME
-          if (!(Test-Path \$bundle)) { throw \"Missing artifact: \$bundle\" }
+            # 1) UMPC 임시폴더 준비
+            ssh -i \$env:SSH_KEY -o StrictHostKeyChecking=no \$env:SSH_USER@\$host "powershell -NoProfile -Command \\"New-Item -ItemType Directory -Force -Path '\$remoteTmp' | Out-Null\\""
 
-          \$appDir = \$env:UMPC_APP_DIR_WIN
-          \$tmpDir = Join-Path \$env:TEMP \"${env:UMPC_APP_NAME}_new\"
+            # 2) 아티팩트 전송 (scp)
+            scp -i \$env:SSH_KEY -o StrictHostKeyChecking=no \$artifact \$env:SSH_USER@\$host:"\$remoteTmp/\$artifact"
 
-          if (Test-Path \$tmpDir) { Remove-Item -Recurse -Force \$tmpDir }
-          New-Item -ItemType Directory -Force -Path \$tmpDir | Out-Null
+            # 3) UMPC에서 배포 수행
+            \$deployCmd = @"
+powershell -NoProfile -Command ^
+  chcp 65001 ^| Out-Null; ^
+  [Console]::OutputEncoding = [Text.Encoding]::UTF8; ^
+  \$appDir='${env.UMPC_APP_DIR_WIN}'; ^
+  \$name='${env.UMPC_APP_NAME}'; ^
+  \$port='${env.APP_PORT}'; ^
+  \$tmp='${env.REMOTE_TMP}'; ^
+  \$bundle=Join-Path \$tmp '${env.ARTIFACT_NAME}'; ^
+  if (!(Test-Path \$bundle)) { throw 'bundle missing: ' + \$bundle }; ^
+  if (Test-Path \$appDir) { ^
+    \$bk=\"\$appDir.backup.\$(Get-Date -Format yyyyMMdd_HHmmss)\"; ^
+    Move-Item -Force \$appDir \$bk ^
+  }; ^
+  New-Item -ItemType Directory -Force -Path \$appDir ^| Out-Null; ^
+  tar -xzf \$bundle -C \$appDir; ^
+  if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) { npm i -g pm2 }; ^
+  Set-Location \$appDir; ^
+  \$env:PORT=\$port; ^
+  pm2 delete \$name ^> \$null 2^>^&1; ^
+  if (Test-Path '.\\ecosystem.config.cjs') { pm2 start ecosystem.config.cjs } else { pm2 start server.js --name \$name }; ^
+  pm2 save; ^
+  pm2 ls --no-color
+"@
 
-          tar -xzf \$bundle -C \$tmpDir
-
-          # install pm2 if missing
-          if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) {
-            npm i -g pm2
-          }
-
-          # Run pm2 via a detached process with redirected stdout/stderr.
-          # When pm2 needs to spawn its daemon, the daemon inherits these handles (not Jenkins),
-          # preventing the PowerShell step from hanging.
-          \$pm2Out = Join-Path \$env:TEMP \"pm2_\$(\$env:UMPC_APP_NAME)_out.log\"
-          \$pm2Err = Join-Path \$env:TEMP \"pm2_\$(\$env:UMPC_APP_NAME)_err.log\"
-
-          function Invoke-Pm2([string]\$argsLine, [bool]\$allowFailure = \$false) {
-            \$cmdLine = \"pm2 \$argsLine 1>> `\"\$pm2Out`\" 2>> `\"\$pm2Err`\"\"
-            \$proc = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c', \$cmdLine) -NoNewWindow -Wait -PassThru
-            if (-not \$allowFailure -and \$proc.ExitCode -ne 0) {
-              throw \"pm2 failed (exit=\$(\$proc.ExitCode)): \$argsLine`nSTDERR:`n\$([IO.File]::ReadAllText(\$pm2Err))\"
-            }
-            \$global:LASTEXITCODE = 0
-          }
-
-          # stop running app (ignore if missing)
-          Invoke-Pm2 \"delete %UMPC_APP_NAME%\" \$true
-
-          # backup
-          if (Test-Path \$appDir) {
-            \$bk = \"\${appDir}.backup.\$(Get-Date -Format yyyyMMdd_HHmmss)\"
-            Move-Item -Force \$appDir \$bk
-          }
-
-          New-Item -ItemType Directory -Force -Path \$appDir | Out-Null
-          Copy-Item -Recurse -Force \"\$tmpDir\\*\" \$appDir
-
-          Set-Location \$appDir
-          \$env:PORT = \$env:APP_PORT
-
-          if (Test-Path '.\\ecosystem.config.cjs') {
-            Invoke-Pm2 'start ecosystem.config.cjs'
-          } else {
-            Invoke-Pm2 \"start server.js --name %UMPC_APP_NAME%\"
-          }
-
-          Write-Host 'pm2 save...'
-          Invoke-Pm2 'save'
-
-          Write-Host 'pm2 list...'
-          Invoke-Pm2 'ls --no-color'
-
-          Write-Host 'Deploy stage completed.'
-          exit 0
-        """
+            ssh -i \$env:SSH_KEY -o StrictHostKeyChecking=no \$env:SSH_USER@\$host \$deployCmd
+          """
         }
       }
     }
 
-    stage('Smoke Check') {
+    stage('Smoke Check (from Jenkins)') {
       steps {
         powershell """
           \$ErrorActionPreference = 'Continue'
+          chcp 65001 | Out-Null
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
           try {
-            \$url = \"http://localhost:\$($env:APP_PORT)/\"
-            Write-Host \"Smoke check: \$url\"
+            \$url = "http://${env.UMPC_HOST}:${env.APP_PORT}/"
+            Write-Host "Smoke check: \$url"
             iwr \$url -UseBasicParsing -TimeoutSec 5 | Out-Null
-            Write-Host 'OK'
+            Write-Host "OK"
           } catch {
-            Write-Host \"Smoke check skipped/failed: \$($_.Exception.Message)\"
+            Write-Host "Smoke check failed: \$($_.Exception.Message)"
           }
         """
       }
