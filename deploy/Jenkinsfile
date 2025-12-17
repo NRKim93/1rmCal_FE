@@ -38,6 +38,7 @@ pipeline {
 
     stage('Checkout Source (GitHub)') {
       steps {
+        echo "Checkout: ${env.GIT_REPO_URL} (${env.GIT_BRANCH})"
         checkout([
           $class: 'GitSCM',
           branches: [[name: "*/${env.GIT_BRANCH}"]],
@@ -49,43 +50,42 @@ pipeline {
       }
     }
 
-stage('Install & Build Next.js (Windows)') {
-  steps {
-    powershell """
-      \$ErrorActionPreference = 'Stop'
-      chcp 65001 | Out-Null
-      [Console]::OutputEncoding = [Text.Encoding]::UTF8
-
-      # Jenkins booleanParam → PowerShell에 문자열로 주입 후 bool 변환
-      \$cleanBuild = [System.Convert]::ToBoolean('${params.CLEAN_BUILD}')
-
-      if (\$cleanBuild) {
-        Write-Host 'CLEAN_BUILD enabled'
-        foreach (\$p in @('node_modules','.next','out')) {
-          if (Test-Path \$p) { Remove-Item -Recurse -Force \$p }
-        }
-      }
-
-      node -v
-      npm -v
-      npm ci
-      npm run build
-
-      if (!(Test-Path '.next\\standalone')) { throw 'Missing .next\\standalone (set output: standalone)' }
-      if (!(Test-Path '.next\\static'))     { throw 'Missing .next\\static' }
-    """
-  }
-}
-
-
-    stage('Package Artifact') {
+    stage('Install & Build Next.js (Windows)') {
       steps {
         powershell """
           \$ErrorActionPreference = 'Stop'
           chcp 65001 | Out-Null
           [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-          # clean
+          # Jenkins booleanParam -> 문자열로 들어오므로 bool 변환
+          \$cleanBuild = [System.Convert]::ToBoolean('${params.CLEAN_BUILD}')
+
+          if (\$cleanBuild) {
+            Write-Host 'CLEAN_BUILD enabled'
+            foreach (\$p in @('node_modules', '.next', 'out')) {
+              if (Test-Path \$p) { Remove-Item -Recurse -Force \$p }
+            }
+          }
+
+          node -v
+          npm -v
+          npm ci
+          npm run build
+
+          if (!(Test-Path '.next\\standalone')) { throw 'Missing .next\\standalone (set output: standalone)' }
+          if (!(Test-Path '.next\\static'))     { throw 'Missing .next\\static' }
+        """
+      }
+    }
+
+    stage('Package Artifact (Windows)') {
+      steps {
+        powershell """
+          \$ErrorActionPreference = 'Stop'
+          chcp 65001 | Out-Null
+          [Console]::OutputEncoding = [Text.Encoding]::UTF8
+
+          # clean deploy_bundle
           Remove-Item -Recurse -Force 'deploy_bundle' -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path 'deploy_bundle' | Out-Null
 
@@ -96,12 +96,13 @@ stage('Install & Build Next.js (Windows)') {
           New-Item -ItemType Directory -Force -Path 'deploy_bundle\\.next\\static' | Out-Null
           Copy-Item -Recurse -Force '.next\\static\\*' 'deploy_bundle\\.next\\static\\'
 
-          # public
+          # public (dest 폴더 반드시 생성)
           if (Test-Path 'public') {
+            New-Item -ItemType Directory -Force -Path 'deploy_bundle\\public' | Out-Null
             Copy-Item -Recurse -Force 'public\\*' 'deploy_bundle\\public\\'
           }
 
-          # ecosystem file (단순 문자열로 작성)
+          # ecosystem file
           \$ecosystem = @"
 module.exports = {
   apps: [{
@@ -138,42 +139,53 @@ module.exports = {
             chcp 65001 | Out-Null
             [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-            \$key  = \$env:SSH_KEY
-            \$dest = \"\$env:SSH_USER@${env.UMPC_HOST}\"
+            \$key = \$env:SSH_KEY
+
+            # PowerShell reserved var \$Host 피하려고 umpcHost 사용
+            \$umpcHost = '${env.UMPC_HOST}'
+            \$remoteTmp = '${env.REMOTE_TMP}'
+            \$appDir = '${env.UMPC_APP_DIR}'
+            \$appName = '${env.UMPC_APP_NAME}'
+            \$port = '${env.APP_PORT}'
+            \$artifact = '${env.ARTIFACT_NAME}'
+
+            \$dest = \"\$env:SSH_USER@\$umpcHost\"
+            \$remoteTgz = \"\$remoteTmp/\$artifact\"
 
             # 1) 원격 디렉토리 생성
-            ssh -i \$key -o StrictHostKeyChecking=no \$dest `
-              \"powershell -NoProfile -ExecutionPolicy Bypass -Command \\\"New-Item -ItemType Directory -Force -Path '${env.REMOTE_TMP}','${env.UMPC_APP_DIR}' | Out-Null\\\"\"
+            & ssh -i \$key -o StrictHostKeyChecking=no \$dest `
+              \"powershell -NoProfile -ExecutionPolicy Bypass -Command \\\"New-Item -ItemType Directory -Force -Path '\$remoteTmp','\$appDir' | Out-Null\\\"\"
 
-            # 2) 아티팩트 전송 (콜론 파서 문제 회피)
-            \$remoteTgz = '${env.REMOTE_TMP}/${env.ARTIFACT_NAME}'
-            scp -i \$key -o StrictHostKeyChecking=no '${env.ARTIFACT_NAME}' \"\${dest}:\$remoteTgz\"
+            # 2) 아티팩트 전송 (dest: 경계 명확히)
+            & scp -i \$key -o StrictHostKeyChecking=no \$artifact \"\${dest}:\$remoteTgz\"
 
-            # 3) 원격 배포 스크립트 (EncodedCommand)
-            \$remote = @(
-              ' \$ErrorActionPreference = ''Stop'' ',
-              ' chcp 65001 | Out-Null ',
-              ' [Console]::OutputEncoding = [Text.Encoding]::UTF8 ',
-              ' \$tmp = ''${env.REMOTE_TMP}'' ',
-              ' \$app = ''${env.UMPC_APP_DIR}'' ',
-              ' \$name = ''${env.UMPC_APP_NAME}'' ',
-              ' \$port = ''${env.APP_PORT}'' ',
-              ' \$bundle = Join-Path \$tmp ''${env.ARTIFACT_NAME}'' ',
-              ' if (!(Test-Path \$bundle)) { throw (''bundle missing: '' + \$bundle) } ',
-              ' if (Test-Path \$app) { \$bk = \"\$app.backup.\$(Get-Date -Format yyyyMMdd_HHmmss)\"; Move-Item -Force \$app \$bk } ',
-              ' New-Item -ItemType Directory -Force -Path \$app | Out-Null ',
-              ' tar -xzf \$bundle -C \$app ',
-              ' if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) { npm i -g pm2 } ',
-              ' Set-Location \$app ',
-              ' \$env:PORT = \$port ',
-              ' cmd /c \"pm2 delete \\\"\$name\\\" >NUL 2>&1\" ',
-              ' if (Test-Path \".\\\\ecosystem.config.cjs\") { pm2 start ecosystem.config.cjs } else { pm2 start server.js --name \$name } ',
-              ' pm2 save ',
-              ' pm2 ls --no-color '
-            ) -join \"`n\"
+            # 3) 원격 배포 스크립트 (EncodedCommand: UTF-16LE)
+            \$remoteLines = @(
+              \"\$ErrorActionPreference = 'Stop'\",
+              \"chcp 65001 | Out-Null\",
+              \"[Console]::OutputEncoding = [Text.Encoding]::UTF8\",
+              \"\$tmp = '\$remoteTmp'\",
+              \"\$app = '\$appDir'\",
+              \"\$name = '\$appName'\",
+              \"\$port = '\$port'\",
+              \"\$bundle = Join-Path \$tmp '\$artifact'\",
+              \"if (!(Test-Path \$bundle)) { throw ('bundle missing: ' + \$bundle) }\",
+              \"if (Test-Path \$app) { \$bk = \$app + '.backup.' + (Get-Date -Format yyyyMMdd_HHmmss); Move-Item -Force \$app \$bk }\",
+              \"New-Item -ItemType Directory -Force -Path \$app | Out-Null\",
+              \"tar -xzf \$bundle -C \$app\",
+              \"if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) { npm i -g pm2 }\",
+              \"Set-Location \$app\",
+              \"\$env:PORT = \$port\",
+              \"cmd /c \\\"pm2 delete \\\"\$name\\\" >NUL 2>&1\\\"\",
+              \"if (Test-Path '.\\\\ecosystem.config.cjs') { pm2 start ecosystem.config.cjs } else { pm2 start server.js --name \$name }\",
+              \"pm2 save\",
+              \"pm2 ls --no-color\"
+            )
 
-            \$b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(\$remote))
-            ssh -i \$key -o StrictHostKeyChecking=no \$dest `
+            \$remoteScript = (\$remoteLines -join \"`n\")
+            \$b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(\$remoteScript))
+
+            & ssh -i \$key -o StrictHostKeyChecking=no \$dest `
               \"powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand \$b64\"
           """
         }
@@ -184,11 +196,16 @@ module.exports = {
       steps {
         powershell """
           \$ErrorActionPreference = 'Continue'
+          chcp 65001 | Out-Null
+          [Console]::OutputEncoding = [Text.Encoding]::UTF8
+
           try {
-            Invoke-WebRequest 'http://${env.UMPC_HOST}:${env.APP_PORT}/' -TimeoutSec 8 | Out-Null
+            \$url = 'http://${env.UMPC_HOST}:${env.APP_PORT}/'
+            Write-Host \"Smoke check: \$url\"
+            Invoke-WebRequest \$url -UseBasicParsing -TimeoutSec 10 | Out-Null
             Write-Host 'Smoke check OK'
           } catch {
-            Write-Host 'Smoke check failed'
+            Write-Host \"Smoke check failed: \$($_.Exception.Message)\"
           }
         """
       }
