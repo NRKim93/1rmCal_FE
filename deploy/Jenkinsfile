@@ -130,153 +130,42 @@ module.exports = {
             chcp 65001 | Out-Null
             [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-            # --- raw values ---
-            $keyRaw  = $env:SSH_KEY
-            $userRaw = $env:SSH_USER
-            $hostRaw = $env:UMPC_HOST
+            # 디버그: env 값 확인
+            Write-Host ("ENV_UMPC_HOST_RAW=[" + $env:UMPC_HOST + "]")
 
-            # --- sanitize (PowerShell 5.1 호환: ?? 사용 금지) ---
-            $key  = ('' + $keyRaw ).Trim().Trim('[',']','"')
-            $user = ('' + $userRaw).Trim().Trim('[',']','"')
-            $umpcHost = ('' + $hostRaw).Trim().Trim('[',']','"')
+            # --- raw values (문자열 강제) ---
+            $keyRaw  = [string]$env:SSH_KEY
+            $userRaw = [string]$env:SSH_USER
+            $hostRaw = [string]$env:UMPC_HOST
 
-            if ([string]::IsNullOrWhiteSpace($user)) { throw "SSH_USER is empty" }
-            if ([string]::IsNullOrWhiteSpace($host)) { throw "UMPC_HOST is empty" }
-            if ([string]::IsNullOrWhiteSpace($key))  { throw "SSH_KEY is empty" }
+            # --- sanitize (PS 5.1 호환) ---
+            $key       = ('' + $keyRaw ).Trim().Trim('[',']','"')
+            $user      = ('' + $userRaw).Trim().Trim('[',']','"')
+            $umpcHost  = ('' + $hostRaw).Trim().Trim('[',']','"')   # ✅ $Host 예약어 절대 안 씀
+
+            if ([string]::IsNullOrWhiteSpace($user))     { throw "SSH_USER is empty" }
+            if ([string]::IsNullOrWhiteSpace($umpcHost)) { throw "UMPC_HOST is empty" }
+            if ([string]::IsNullOrWhiteSpace($key))      { throw "SSH_KEY is empty" }
 
             if (!(Test-Path $key)) {
               throw "SSH key file not found: [$key]"
             }
 
-            $remoteTmp = $env:REMOTE_TMP
-            $appDir    = $env:UMPC_APP_DIR
-            $appName   = $env:UMPC_APP_NAME
-            $port      = $env:APP_PORT
-            $artifact  = $env:ARTIFACT_NAME
+            $remoteTmp = [string]$env:REMOTE_TMP
+            $appDir    = [string]$env:UMPC_APP_DIR
+            $appName   = [string]$env:UMPC_APP_NAME
+            $port      = [string]$env:APP_PORT
+            $artifact  = [string]$env:ARTIFACT_NAME
 
-            $dest = ("{0}@{1}" -f $user, $host).Trim()
+            $dest = ("{0}@{1}" -f $user, $umpcHost).Trim()
             $remoteTgz = "$remoteTmp/$artifact"
 
             Write-Host "SSH_USER=[$user]"
-            Write-Host "UMPC_HOST=[$host]"
+            Write-Host "UMPC_HOST=[$umpcHost]"
             Write-Host "DEST=[$dest]"
-            Write-Host "SSH_KEY=[$key]"
+            Write-Host "SSH_KEY=[****]"
 
             function Run-External([string]$exe, [object[]]$args) {
-              Write-Host ("RUN: {0} {1}" -f $exe, ($args | ForEach-Object { "[$_]" } -join ' '))
-              $out = & $exe @args 2>&1
-              $out | ForEach-Object { Write-Host $_ }
-              if ($LASTEXITCODE -ne 0) {
-                throw "Command failed ($LASTEXITCODE): $exe"
-              }
-            }
-
-            # (선택) ssh 버전 출력 (stderr여도 무시)
-            try { & ssh -V 2>&1 | ForEach-Object { Write-Host $_ } } catch { }
-
-            # 1) 원격 디렉토리 생성
-            $mk = @"
-$ErrorActionPreference = 'Stop'
-New-Item -ItemType Directory -Force -Path '$remoteTmp' | Out-Null
-New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
-"@
-            $mkB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($mk))
-
-            Run-External 'ssh' @(
-              '-i', $key,
-              '-o', 'StrictHostKeyChecking=no',
-              $dest,
-              'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-              '-EncodedCommand', $mkB64
-            )
-
-            # 2) 아티팩트 업로드
-            Run-External 'scp' @(
-              '-i', $key,
-              '-o', 'StrictHostKeyChecking=no',
-              $artifact,
-              "${dest}:$remoteTgz"
-            )
-
-            # 3) 원격 배포
-            $deploy = @"
-$ErrorActionPreference = 'Stop'
-chcp 65001 | Out-Null
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
-
-$tmp    = '$remoteTmp'
-$app    = '$appDir'
-$name   = '$appName'
-$port   = '$port'
-$bundle = Join-Path $tmp '$artifact'
-
-if (!(Test-Path $bundle)) { throw ('bundle missing: ' + $bundle) }
-
-if (Test-Path $app) {
-  $bk = $app + '.backup.' + (Get-Date -Format yyyyMMdd_HHmmss)
-  Move-Item -Force $app $bk
-}
-
-New-Item -ItemType Directory -Force -Path $app | Out-Null
-tar -xzf $bundle -C $app
-
-if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) { npm i -g pm2 }
-
-Set-Location $app
-$env:PORT = $port
-
-try { pm2 delete $name 2>$null | Out-Null } catch { }
-
-if (Test-Path '.\\ecosystem.config.cjs') {
-  pm2 start ecosystem.config.cjs
-} else {
-  pm2 start server.js --name $name
-}
-
-pm2 save
-pm2 ls --no-color
-"@
-            $deployB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($deploy))
-
-            Run-External 'ssh' @(
-              '-i', $key,
-              '-o', 'StrictHostKeyChecking=no',
-              $dest,
-              'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-              '-EncodedCommand', $deployB64
-            )
-          '''
-        }
-      }
-    }
-
-    stage('Smoke Check') {
-      steps {
-        powershell """
-          \$ErrorActionPreference = 'Continue'
-          chcp 65001 | Out-Null
-          [Console]::OutputEncoding = [Text.Encoding]::UTF8
-
-          try {
-            \$url = 'http://${env.UMPC_HOST}:${env.APP_PORT}/'
-            Write-Host "Smoke check: \$url"
-            Invoke-WebRequest \$url -UseBasicParsing -TimeoutSec 10 | Out-Null
-            Write-Host 'Smoke check OK'
-          } catch {
-            Write-Host "Smoke check failed: \$($_.Exception.Message)"
-          }
-        """
-      }
-    }
-
-    stage('Clean Workspace (after)') {
-      steps { cleanWs() }
-    }
-  }
-
-  post {
-    always  { echo 'Pipeline finished.' }
-    success { echo '✅ Deploy succeeded.' }
-    failure { echo '❌ Deploy failed.' }
-  }
-}
+              # PS5.1 안전 출력 (ForEach-Object -join 금지)
+              $printed = ""
+              foreach ($a in $args) { $printed +=
