@@ -135,10 +135,10 @@ module.exports = {
             $userRaw = $env:SSH_USER
             $hostRaw = $env:UMPC_HOST
 
-            # --- sanitize: 혹시 값에 [] 같은게 섞여있으면 제거 ---
-            $key  = ($keyRaw  ?? '').Trim().Trim('[',']','"')
-            $user = ($userRaw ?? '').Trim().Trim('[',']','"')
-            $host = ($hostRaw ?? '').Trim().Trim('[',']','"')
+            # --- sanitize (PowerShell 5.1 호환: ?? 사용 금지) ---
+            $key  = ('' + $keyRaw ).Trim().Trim('[',']','"')
+            $user = ('' + $userRaw).Trim().Trim('[',']','"')
+            $host = ('' + $hostRaw).Trim().Trim('[',']','"')
 
             if ([string]::IsNullOrWhiteSpace($user)) { throw "SSH_USER is empty" }
             if ([string]::IsNullOrWhiteSpace($host)) { throw "UMPC_HOST is empty" }
@@ -171,7 +171,7 @@ module.exports = {
               }
             }
 
-            # (선택) ssh 버전 출력: stderr로 나와도 실패시키지 않음
+            # (선택) ssh 버전 출력 (stderr여도 무시)
             try { & ssh -V 2>&1 | ForEach-Object { Write-Host $_ } } catch { }
 
             # 1) 원격 디렉토리 생성
@@ -236,20 +236,19 @@ if (Test-Path '.\\ecosystem.config.cjs') {
 pm2 save
 pm2 ls --no-color
 "@
-        $deployB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($deploy))
+            $deployB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($deploy))
 
-        Run-External 'ssh' @(
-          '-i', $key,
-          '-o', 'StrictHostKeyChecking=no',
-          $dest,
-          'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-          '-EncodedCommand', $deployB64
-        )
-      '''
-    }
+            Run-External 'ssh' @(
+              '-i', $key,
+              '-o', 'StrictHostKeyChecking=no',
+              $dest,
+              'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+              '-EncodedCommand', $deployB64
+            )
+          '''
+        }
       }
     }
-
 
     stage('Smoke Check') {
       steps {
@@ -260,11 +259,11 @@ pm2 ls --no-color
 
           try {
             \$url = 'http://${env.UMPC_HOST}:${env.APP_PORT}/'
-            Write-Host \"Smoke check: \$url\"
+            Write-Host "Smoke check: \$url"
             Invoke-WebRequest \$url -UseBasicParsing -TimeoutSec 10 | Out-Null
             Write-Host 'Smoke check OK'
           } catch {
-            Write-Host \"Smoke check failed: \$($_.Exception.Message)\"
+            Write-Host "Smoke check failed: \$($_.Exception.Message)"
           }
         """
       }
