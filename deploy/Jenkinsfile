@@ -168,4 +168,122 @@ module.exports = {
             function Run-External([string]$exe, [object[]]$args) {
               # PS5.1 안전 출력 (ForEach-Object -join 금지)
               $printed = ""
-              foreach ($a in $args) { $printed +=
+              foreach ($a in $args) { $printed += "[$a] " }
+              Write-Host ("RUN: {0} {1}" -f $exe, $printed.Trim())
+
+              $out = & $exe @args 2>&1
+              $out | ForEach-Object { Write-Host $_ }
+              if ($LASTEXITCODE -ne 0) {
+                throw "Command failed ($LASTEXITCODE): $exe"
+              }
+            }
+
+            # ssh 버전 출력(참고용)
+            try { & ssh -V 2>&1 | ForEach-Object { Write-Host $_ } } catch { }
+
+            # 1) 원격 디렉토리 생성
+            $mk = @"
+`$ErrorActionPreference = 'Stop'
+New-Item -ItemType Directory -Force -Path '$remoteTmp' | Out-Null
+New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
+"@
+            $mkB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($mk))
+
+            Run-External 'ssh' @(
+              '-i', $key,
+              '-o', 'StrictHostKeyChecking=no',
+              $dest,
+              'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+              '-EncodedCommand', $mkB64
+            )
+
+            # 2) 아티팩트 업로드
+            Run-External 'scp' @(
+              '-i', $key,
+              '-o', 'StrictHostKeyChecking=no',
+              $artifact,
+              "${dest}:$remoteTgz"
+            )
+
+            # 3) 원격 배포
+            $deploy = @"
+`$ErrorActionPreference = 'Stop'
+chcp 65001 | Out-Null
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+
+`$tmp    = '$remoteTmp'
+`$app    = '$appDir'
+`$name   = '$appName'
+`$port   = '$port'
+`$bundle = Join-Path `$tmp '$artifact'
+
+if (!(Test-Path `$bundle)) { throw ('bundle missing: ' + `$bundle) }
+
+if (Test-Path `$app) {
+  `$bk = `$app + '.backup.' + (Get-Date -Format yyyyMMdd_HHmmss)
+  Move-Item -Force `$app `$bk
+}
+
+New-Item -ItemType Directory -Force -Path `$app | Out-Null
+tar -xzf `$bundle -C `$app
+
+if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) { npm i -g pm2 }
+
+Set-Location `$app
+`$env:PORT = `$port
+
+try { pm2 delete `$name 2>`$null | Out-Null } catch { }
+
+if (Test-Path '.\\ecosystem.config.cjs') {
+  pm2 start ecosystem.config.cjs
+} else {
+  pm2 start server.js --name `$name
+}
+
+pm2 save
+pm2 ls --no-color
+"@
+            $deployB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($deploy))
+
+            Run-External 'ssh' @(
+              '-i', $key,
+              '-o', 'StrictHostKeyChecking=no',
+              $dest,
+              'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+              '-EncodedCommand', $deployB64
+            )
+          '''
+        }
+      }
+    }
+
+    stage('Smoke Check') {
+      steps {
+        powershell """
+          \$ErrorActionPreference = 'Continue'
+          chcp 65001 | Out-Null
+          [Console]::OutputEncoding = [Text.Encoding]::UTF8
+
+          try {
+            \$url = 'http://${env.UMPC_HOST}:${env.APP_PORT}/'
+            Write-Host "Smoke check: \$url"
+            Invoke-WebRequest \$url -UseBasicParsing -TimeoutSec 10 | Out-Null
+            Write-Host 'Smoke check OK'
+          } catch {
+            Write-Host "Smoke check failed: \$($_.Exception.Message)"
+          }
+        """
+      }
+    }
+
+    stage('Clean Workspace (after)') {
+      steps { cleanWs() }
+    }
+  }
+
+  post {
+    always  { echo 'Pipeline finished.' }
+    success { echo '✅ Deploy succeeded.' }
+    failure { echo '❌ Deploy failed.' }
+  }
+}
