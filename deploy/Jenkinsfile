@@ -153,8 +153,17 @@ module.exports = {
             \$remoteTgz = \"\$remoteTmp/\$artifact\"
 
             # 1) 원격 디렉토리 생성
-            & ssh -i \$key -o StrictHostKeyChecking=no \$dest `
-              \"powershell -NoProfile -ExecutionPolicy Bypass -Command \\\"New-Item -ItemType Directory -Force -Path '\$remoteTmp','\$appDir' | Out-Null\\\"\"
+            $mkScript = @(
+              "$ErrorActionPreference = 'Stop'",
+              "New-Item -ItemType Directory -Force -Path '${env.REMOTE_TMP}','${env.UMPC_APP_DIR}' | Out-Null"
+            ) -join "`n"
+
+            $mkB64 = [Convert]::ToBase64String(
+              [Text.Encoding]::Unicode.GetBytes($mkScript)
+            )
+
+            & ssh -i $key -o StrictHostKeyChecking=no $dest `
+              "powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand $mkB64"
 
             # 2) 아티팩트 전송 (dest: 경계 명확히)
             & scp -i \$key -o StrictHostKeyChecking=no \$artifact \"\${dest}:\$remoteTgz\"
