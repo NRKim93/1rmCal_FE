@@ -16,7 +16,7 @@ pipeline {
     ARTIFACT_NAME = 'deploy_bundle.tar.gz'
 
     // UMPC target
-    UMPC_HOST     = '172.30.1.24'
+    UMPC_HOST     = '172.30.1.254'
     REMOTE_TMP    = 'C:/temp/the-gym-fe'
     UMPC_APP_DIR  = 'C:/apps/the-gym-fe'
     UMPC_APP_NAME = 'the-gym-fe'
