@@ -138,7 +138,7 @@ module.exports = {
             # --- sanitize (PowerShell 5.1 호환: ?? 사용 금지) ---
             $key  = ('' + $keyRaw ).Trim().Trim('[',']','"')
             $user = ('' + $userRaw).Trim().Trim('[',']','"')
-            $host = ('' + $hostRaw).Trim().Trim('[',']','"')
+            $umpcHost = ('' + $hostRaw).Trim().Trim('[',']','"')
 
             if ([string]::IsNullOrWhiteSpace($user)) { throw "SSH_USER is empty" }
             if ([string]::IsNullOrWhiteSpace($host)) { throw "UMPC_HOST is empty" }
