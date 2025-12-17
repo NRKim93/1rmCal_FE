@@ -133,21 +133,32 @@ module.exports = {
           credentialsId: "${env.UMPC_SSH_CRED_ID}",
           keyFileVariable: 'SSH_KEY',
           usernameVariable: 'SSH_USER'
-        )]) {
+      )]) {
           powershell """
-            \$ErrorActionPreference = 'Stop'
+            \$ErrorActionPreference = 'Continue'
             chcp 65001 | Out-Null
             [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-            \$key  = \$env:SSH_KEY
-            \$dest = "\$env:SSH_USER@${env.UMPC_HOST}"
+            Write-Host "SSH_USER=\$env:SSH_USER"
+            Write-Host "SSH_KEY=\$env:SSH_KEY"
 
-            # ✅ known_hosts 경고/출력 때문에 터지는 것 방지: cmd로 실행 + stderr 무시(2>nul)
-            cmd /c "ssh -i \\"\$key\\" -o StrictHostKeyChecking=no \$dest exit 2>nul"
+            Write-Host "where ssh:"
+            cmd /c "where ssh"
+            Write-Host "where scp:"
+            cmd /c "where scp"
+
+            Write-Host "ssh version:"
+            cmd /c "ssh -V"
+
+            Write-Host "try connect:"
+            cmd /c "ssh -vvv -i \\"\$env:SSH_KEY\\" -o StrictHostKeyChecking=no \$env:SSH_USER@${env.UMPC_HOST} exit"
+            Write-Host "ssh exitcode=\$LASTEXITCODE"
+            if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }
           """
         }
       }
     }
+
 
 
     stage('Smoke Check') {
