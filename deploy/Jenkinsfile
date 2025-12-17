@@ -166,15 +166,27 @@ module.exports = {
             Write-Host "SSH_KEY=[****]"
 
             function Run-External([string]$exe, [object[]]$args) {
-              # PS5.1 안전 출력 (ForEach-Object -join 금지)
+              # exe 존재 확인 (PATH 문제면 여기서 바로 잡힘)
+              $cmd = Get-Command $exe -ErrorAction SilentlyContinue
+              if (-not $cmd) {
+                throw "Executable not found in PATH: [$exe]  (try full path like C:\\Windows\\System32\\OpenSSH\\ssh.exe)"
+              }
+
+              # 로그 출력(PS5.1 안전)
               $printed = ""
               foreach ($a in $args) { $printed += "[$a] " }
               Write-Host ("RUN: {0} {1}" -f $exe, $printed.Trim())
 
-              $out = & $exe @args 2>&1
-              $out | ForEach-Object { Write-Host $_ }
-              if ($LASTEXITCODE -ne 0) {
-                throw "Command failed ($LASTEXITCODE): $exe"
+              # 실행 + stderr/stdout 합치기
+              $output = & $exe @args 2>&1
+
+              # ★ 중요: 출력 찍기 전에 exit code를 먼저 저장
+              $exit = $LASTEXITCODE
+
+              foreach ($line in $output) { Write-Host $line }
+
+              if ($exit -ne 0) {
+                throw "Command failed ($exit): $exe"
               }
             }
 
