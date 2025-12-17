@@ -49,30 +49,34 @@ pipeline {
       }
     }
 
-    stage('Install & Build Next.js (Windows)') {
-      steps {
-        powershell """
-          \$ErrorActionPreference = 'Stop'
-          chcp 65001 | Out-Null
-          [Console]::OutputEncoding = [Text.Encoding]::UTF8
+stage('Install & Build Next.js (Windows)') {
+  steps {
+    powershell """
+      \$ErrorActionPreference = 'Stop'
+      chcp 65001 | Out-Null
+      [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-          if (${params.CLEAN_BUILD} -eq \$true) {
-            Write-Host 'CLEAN_BUILD enabled'
-            foreach (\$p in @('node_modules','.next','out')) {
-              if (Test-Path \$p) { Remove-Item -Recurse -Force \$p }
-            }
-          }
+      # Jenkins booleanParam → PowerShell에 문자열로 주입 후 bool 변환
+      \$cleanBuild = [System.Convert]::ToBoolean('${params.CLEAN_BUILD}')
 
-          node -v
-          npm -v
-          npm ci
-          npm run build
-
-          if (!(Test-Path '.next\\standalone')) { throw 'Missing .next\\standalone (set output: standalone)' }
-          if (!(Test-Path '.next\\static'))     { throw 'Missing .next\\static' }
-        """
+      if (\$cleanBuild) {
+        Write-Host 'CLEAN_BUILD enabled'
+        foreach (\$p in @('node_modules','.next','out')) {
+          if (Test-Path \$p) { Remove-Item -Recurse -Force \$p }
+        }
       }
-    }
+
+      node -v
+      npm -v
+      npm ci
+      npm run build
+
+      if (!(Test-Path '.next\\standalone')) { throw 'Missing .next\\standalone (set output: standalone)' }
+      if (!(Test-Path '.next\\static'))     { throw 'Missing .next\\static' }
+    """
+  }
+}
+
 
     stage('Package Artifact') {
       steps {
