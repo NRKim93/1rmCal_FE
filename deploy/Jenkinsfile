@@ -176,7 +176,8 @@ module.exports = {
               \"if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) { npm i -g pm2 }\",
               \"Set-Location \$app\",
               \"\$env:PORT = \$port\",
-              \"cmd /c \\\"pm2 delete \\\"\$name\\\" >NUL 2>&1\\\"\",
+              \"pm2 delete \$name 2>\$null | Out-Null\",
+              \"\$LASTEXITCODE = 0\",
               \"if (Test-Path '.\\\\ecosystem.config.cjs') { pm2 start ecosystem.config.cjs } else { pm2 start server.js --name \$name }\",
               \"pm2 save\",
               \"pm2 ls --no-color\"
