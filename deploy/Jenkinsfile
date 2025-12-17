@@ -78,20 +78,16 @@ pipeline {
           Remove-Item -Recurse -Force 'deploy_bundle' -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path 'deploy_bundle' | Out-Null
 
-          # standalone server files
           Copy-Item -Recurse -Force '.next\\standalone\\*' 'deploy_bundle\\'
 
-          # static
           New-Item -ItemType Directory -Force -Path 'deploy_bundle\\.next\\static' | Out-Null
           Copy-Item -Recurse -Force '.next\\static\\*' 'deploy_bundle\\.next\\static\\'
 
-          # public
           if (Test-Path 'public') {
             New-Item -ItemType Directory -Force -Path 'deploy_bundle\\public' | Out-Null
             Copy-Item -Recurse -Force 'public\\*' 'deploy_bundle\\public\\'
           }
 
-          # ecosystem
           \$ecosystem = @"
 module.exports = {
   apps: [{
@@ -126,7 +122,7 @@ module.exports = {
 
             \$key  = \$env:SSH_KEY
             \$user = \$env:SSH_USER
-            \$host = '${env.UMPC_HOST}'
+            \$umpcHost = '${env.UMPC_HOST}'   # ✅ \$Host 금지
 
             \$remoteTmp = '${env.REMOTE_TMP}'
             \$appDir    = '${env.UMPC_APP_DIR}'
@@ -134,18 +130,17 @@ module.exports = {
             \$port      = '${env.APP_PORT}'
             \$artifact  = '${env.ARTIFACT_NAME}'
 
-            # ---- 0) quick check (ssh -V prints to stderr so use cmd) ----
             cmd /c "where ssh"
             cmd /c "where scp"
             cmd /c "ssh -V"
 
-            # ---- 1) create remote dirs ----
-            cmd /c "ssh -i \\"\$key\\" -o StrictHostKeyChecking=no \${user}@\${host} powershell -NoProfile -ExecutionPolicy Bypass -Command \\"New-Item -ItemType Directory -Force -Path '\${remoteTmp}','\${appDir}' ^| Out-Null\\""
+            # 1) create remote dirs
+            cmd /c "ssh -i \\"\$key\\" -o StrictHostKeyChecking=no \${user}@\${umpcHost} powershell -NoProfile -ExecutionPolicy Bypass -Command \\"New-Item -ItemType Directory -Force -Path '\${remoteTmp}','\${appDir}' ^| Out-Null\\""
 
-            # ---- 2) upload artifact ----
-            cmd /c "scp -i \\"\$key\\" -o StrictHostKeyChecking=no \\"\$artifact\\" \${user}@\${host}:\${remoteTmp}/\${artifact}"
+            # 2) upload artifact
+            cmd /c "scp -i \\"\$key\\" -o StrictHostKeyChecking=no \\"\$artifact\\" \${user}@\${umpcHost}:\${remoteTmp}/\${artifact}"
 
-            # ---- 3) remote deploy (NO cmd /c inside, pure PowerShell) ----
+            # 3) remote deploy
             \$deploy = @"
 \$ErrorActionPreference = 'Stop'
 chcp 65001 | Out-Null
@@ -172,7 +167,6 @@ if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) { npm i -g pm2 }
 Set-Location \$app
 \$env:PORT = \$port
 
-# pm2 delete가 실패해도 계속 진행
 try { pm2 delete \$name | Out-Null } catch { }
 
 if (Test-Path '.\\ecosystem.config.cjs') { pm2 start ecosystem.config.cjs } else { pm2 start server.js --name \$name }
@@ -181,8 +175,7 @@ pm2 ls --no-color
 "@
 
             \$b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(\$deploy))
-
-            cmd /c "ssh -i \\"\$key\\" -o StrictHostKeyChecking=no \${user}@\${host} powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand \$b64"
+            cmd /c "ssh -i \\"\$key\\" -o StrictHostKeyChecking=no \${user}@\${umpcHost} powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand \$b64"
           """
         }
       }
