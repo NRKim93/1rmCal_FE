@@ -3,11 +3,7 @@ pipeline {
   options { timestamps() }
 
   parameters {
-    booleanParam(
-      name: 'CLEAN_BUILD',
-      defaultValue: true,
-      description: 'Clean build (remove node_modules/.next/out)'
-    )
+    booleanParam(name: 'CLEAN_BUILD', defaultValue: true, description: 'Clean build (remove node_modules/.next/out)')
   }
 
   environment {
@@ -19,7 +15,7 @@ pipeline {
     // Build output
     ARTIFACT_NAME = 'deploy_bundle.tar.gz'
 
-    // UMPC target (원격 경로는 / 권장)
+    // UMPC target
     UMPC_HOST     = '172.30.1.24'
     REMOTE_TMP    = 'C:/temp/the-gym-fe'
     UMPC_APP_DIR  = 'C:/apps/the-gym-fe'
@@ -42,26 +38,24 @@ pipeline {
         checkout([
           $class: 'GitSCM',
           branches: [[name: "*/${env.GIT_BRANCH}"]],
-          userRemoteConfigs: [[
-            url: env.GIT_REPO_URL,
-            credentialsId: env.GIT_CREDENTIALS_ID
-          ]]
+          userRemoteConfigs: [[url: env.GIT_REPO_URL, credentialsId: env.GIT_CREDENTIALS_ID]]
         ])
       }
     }
 
     stage('Install & Build Next.js (Windows)') {
       steps {
-        powershell '''
-          $ErrorActionPreference = 'Stop'
+        powershell """
+          \$ErrorActionPreference = 'Stop'
           chcp 65001 | Out-Null
           [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-          $cleanBuild = [System.Convert]::ToBoolean($env:CLEAN_BUILD)
-          if ($cleanBuild) {
+          # ✅ parameter에서 안전하게 읽기 (env로 읽지 말 것)
+          \$cleanBuild = [System.Convert]::ToBoolean('${params.CLEAN_BUILD}')
+          if (\$cleanBuild) {
             Write-Host 'CLEAN_BUILD enabled'
-            foreach ($p in @('node_modules', '.next', 'out')) {
-              if (Test-Path $p) { Remove-Item -Recurse -Force $p }
+            foreach (\$p in @('node_modules', '.next', 'out')) {
+              if (Test-Path \$p) { Remove-Item -Recurse -Force \$p }
             }
           }
 
@@ -72,14 +66,14 @@ pipeline {
 
           if (!(Test-Path '.next\\standalone')) { throw 'Missing .next\\standalone (set output: standalone)' }
           if (!(Test-Path '.next\\static'))     { throw 'Missing .next\\static' }
-        '''
+        """
       }
     }
 
     stage('Package Artifact (Windows)') {
       steps {
-        powershell '''
-          $ErrorActionPreference = 'Stop'
+        powershell """
+          \$ErrorActionPreference = 'Stop'
           chcp 65001 | Out-Null
           [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
@@ -100,27 +94,27 @@ pipeline {
           }
 
           # ecosystem file
-          $ecosystem = @"
+          \$ecosystem = @"
 module.exports = {
   apps: [{
-    name: '$($env:UMPC_APP_NAME)',
+    name: '${env.UMPC_APP_NAME}',
     script: 'server.js',
     env: {
       NODE_ENV: 'production',
-      PORT: '$($env:APP_PORT)'
+      PORT: '${env.APP_PORT}'
     }
   }]
 }
 "@
-          $ecosystem | Out-File -FilePath 'deploy_bundle\\ecosystem.config.cjs' -Encoding utf8 -Force
+          \$ecosystem | Out-File -FilePath 'deploy_bundle\\ecosystem.config.cjs' -Encoding utf8 -Force
 
           # pack
-          Remove-Item -Force $env:ARTIFACT_NAME -ErrorAction SilentlyContinue
-          tar -czf $env:ARTIFACT_NAME -C deploy_bundle .
+          Remove-Item -Force '${env.ARTIFACT_NAME}' -ErrorAction SilentlyContinue
+          tar -czf '${env.ARTIFACT_NAME}' -C deploy_bundle .
 
-          if (!(Test-Path $env:ARTIFACT_NAME)) { throw 'Artifact not created' }
-          Get-Item $env:ARTIFACT_NAME | Format-List Name,Length,LastWriteTime
-        '''
+          if (!(Test-Path '${env.ARTIFACT_NAME}')) { throw 'Artifact not created' }
+          Get-Item '${env.ARTIFACT_NAME}' | Format-List Name,Length,LastWriteTime
+        """
       }
     }
 
@@ -131,128 +125,134 @@ module.exports = {
           keyFileVariable: 'SSH_KEY',
           usernameVariable: 'SSH_USER'
         )]) {
-          powershell '''
-            $ErrorActionPreference = 'Stop'
+          powershell """
+            \$ErrorActionPreference = 'Stop'
             chcp 65001 | Out-Null
             [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-            $key  = $env:SSH_KEY
-            $user = $env:SSH_USER
+            \$key  = \$env:SSH_KEY
+            \$user = \$env:SSH_USER
 
-            # ✅ PowerShell 예약변수 $Host 절대 쓰지 말기
-            $umpcHost  = $env:UMPC_HOST
-            $remoteTmp = $env:REMOTE_TMP
-            $appDir    = $env:UMPC_APP_DIR
-            $appName   = $env:UMPC_APP_NAME
-            $port      = $env:APP_PORT
-            $artifact  = $env:ARTIFACT_NAME
+            # ✅ PowerShell 예약변수 \$Host 절대 쓰지 말기
+            \$umpcHost  = '${env.UMPC_HOST}'
+            \$remoteTmp = '${env.REMOTE_TMP}'
+            \$appDir    = '${env.UMPC_APP_DIR}'
+            \$appName   = '${env.UMPC_APP_NAME}'
+            \$port      = '${env.APP_PORT}'
+            \$artifact  = '${env.ARTIFACT_NAME}'
 
-            $dest = "$user@$umpcHost"
-            $remoteTgz = "$remoteTmp/$artifact"
+            \$dest = \"\$user@\$umpcHost\"
+            \$remoteTgz = \"\$remoteTmp/\$artifact\"
 
-            function Run-External([string]$exe, [object[]]$args) {
-              $out = & $exe @args 2>&1
-              $out | ForEach-Object { Write-Host $_ }
-              if ($LASTEXITCODE -ne 0) {
-                throw "Command failed ($LASTEXITCODE): $exe $([string]::Join(' ', $args))"
+            # ✅ 가드: ssh usage / hostname 깨짐 원인 빠르게 잡기
+            Write-Host \"SSH_USER=[\$user]\"
+            Write-Host \"UMPC_HOST=[\$umpcHost]\"
+            Write-Host \"DEST=[\$dest]\"
+            if ([string]::IsNullOrWhiteSpace(\$user) -or [string]::IsNullOrWhiteSpace(\$umpcHost)) {
+              throw \"SSH_USER or UMPC_HOST is empty. (dest=\$dest)\"
+            }
+
+            function Run-External([string]\$exe, [object[]]\$args) {
+              \$out = & \$exe @args 2>&1
+              \$out | ForEach-Object { Write-Host \$_ }
+              \$global:LASTEXITCODE = \$LASTEXITCODE
+              if (\$LASTEXITCODE -ne 0) {
+                throw \"Command failed (\$LASTEXITCODE): \$exe \$([string]::Join(' ', \$args))\"
               }
             }
 
-            # 0) ssh/scp 경로 확인(참고용). stderr여도 실패로 처리 안 되게 여기서만 예외 처리
-            try { & ssh -V 2>&1 | ForEach-Object { Write-Host $_ } } catch { }
-
-            # 1) 원격 디렉토리 생성 (EncodedCommand로 따옴표/파이프 지옥 제거)
-            $mk = @"
-$ErrorActionPreference = 'Stop'
-New-Item -ItemType Directory -Force -Path '$remoteTmp' | Out-Null
-New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
-"@
-            $mkB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($mk))
+            # 1) 원격 디렉토리 생성 (EncodedCommand로 따옴표/파이프 제거)
+            \$mk = @\"
+\$ErrorActionPreference = 'Stop'
+New-Item -ItemType Directory -Force -Path '\$remoteTmp' | Out-Null
+New-Item -ItemType Directory -Force -Path '\$appDir'    | Out-Null
+\"@
+            \$mkB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(\$mk))
 
             Run-External 'ssh' @(
-              '-i', $key,
+              '-i', \$key,
               '-o', 'StrictHostKeyChecking=no',
-              $dest,
+              \$dest,
               'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-              '-EncodedCommand', $mkB64
+              '-EncodedCommand', \$mkB64
             )
 
             # 2) 아티팩트 업로드
             Run-External 'scp' @(
-              '-i', $key,
+              '-i', \$key,
               '-o', 'StrictHostKeyChecking=no',
-              $artifact,
-              "${dest}:$remoteTgz"
+              \$artifact,
+              \"\${dest}:\$remoteTgz\"
             )
 
             # 3) 원격 배포
-            $deploy = @"
-$ErrorActionPreference = 'Stop'
+            \$deploy = @\"
+\$ErrorActionPreference = 'Stop'
 chcp 65001 | Out-Null
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-$tmp    = '$remoteTmp'
-$app    = '$appDir'
-$name   = '$appName'
-$port   = '$port'
-$bundle = Join-Path $tmp '$artifact'
+\$tmp    = '\$remoteTmp'
+\$app    = '\$appDir'
+\$name   = '\$appName'
+\$port   = '\$port'
+\$bundle = Join-Path \$tmp '\$artifact'
 
-if (!(Test-Path $bundle)) { throw ('bundle missing: ' + $bundle) }
+if (!(Test-Path \$bundle)) { throw ('bundle missing: ' + \$bundle) }
 
-if (Test-Path $app) {
-  $bk = $app + '.backup.' + (Get-Date -Format yyyyMMdd_HHmmss)
-  Move-Item -Force $app $bk
+if (Test-Path \$app) {
+  \$bk = \$app + '.backup.' + (Get-Date -Format yyyyMMdd_HHmmss)
+  Move-Item -Force \$app \$bk
 }
 
-New-Item -ItemType Directory -Force -Path $app | Out-Null
-tar -xzf $bundle -C $app
+New-Item -ItemType Directory -Force -Path \$app | Out-Null
+tar -xzf \$bundle -C \$app
 
 if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) { npm i -g pm2 }
 
-Set-Location $app
-$env:PORT = $port
+Set-Location \$app
+\$env:PORT = \$port
 
-try { pm2 delete $name 2>$null | Out-Null } catch { }
+try { pm2 delete \$name 2>\$null | Out-Null } catch { }
 
-if (Test-Path '.\\ecosystem.config.cjs') {
+if (Test-Path '.\\\\ecosystem.config.cjs') {
   pm2 start ecosystem.config.cjs
 } else {
-  pm2 start server.js --name $name
+  pm2 start server.js --name \$name
 }
 
 pm2 save
 pm2 ls --no-color
-"@
-            $deployB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($deploy))
+\"@
+            \$deployB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(\$deploy))
 
             Run-External 'ssh' @(
-              '-i', $key,
+              '-i', \$key,
               '-o', 'StrictHostKeyChecking=no',
-              $dest,
+              \$dest,
               'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-              '-EncodedCommand', $deployB64
+              '-EncodedCommand', \$deployB64
             )
-          '''
+          """
         }
       }
     }
 
     stage('Smoke Check') {
       steps {
-        powershell '''
-          $ErrorActionPreference = 'Continue'
+        powershell """
+          \$ErrorActionPreference = 'Continue'
           chcp 65001 | Out-Null
           [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
           try {
-            $url = "http://$($env:UMPC_HOST):$($env:APP_PORT)/"
-            Write-Host "Smoke check: $url"
-            Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 10 | Out-Null
+            \$url = 'http://${env.UMPC_HOST}:${env.APP_PORT}/'
+            Write-Host \"Smoke check: \$url\"
+            Invoke-WebRequest \$url -UseBasicParsing -TimeoutSec 10 | Out-Null
             Write-Host 'Smoke check OK'
           } catch {
-            Write-Host "Smoke check failed: $($_.Exception.Message)"
+            Write-Host \"Smoke check failed: \$($_.Exception.Message)\"
           }
-        '''
+        """
       }
     }
 
