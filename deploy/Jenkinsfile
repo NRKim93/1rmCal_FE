@@ -243,6 +243,15 @@ New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
             $mkB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($mk))
 
             try {
+              # validate key format early (avoid opaque "invalid format")
+              $firstLine = (Get-Content -LiteralPath $key -TotalCount 1 -ErrorAction SilentlyContinue)
+              if ([string]::IsNullOrWhiteSpace($firstLine)) {
+                throw "SSH key file is empty: [$key]"
+              }
+              if ($firstLine -notmatch '^-+BEGIN .*PRIVATE KEY-+$') {
+                throw "SSH key file is not an OpenSSH private key (first line: [$firstLine]). If this is a PuTTY .ppk, convert it to OpenSSH and re-upload the credential."
+              }
+
             Run-External 'ssh' @(
               '-i', $key,
               '-o', 'IdentitiesOnly=yes',
