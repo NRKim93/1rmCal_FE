@@ -443,7 +443,7 @@ tar -xzf `$bundle -C `$app
             Invoke-WebRequest \$url -UseBasicParsing -TimeoutSec 10 | Out-Null
             Write-Host 'Smoke check OK'
           } catch {
-            Write-Host "Smoke check failed: \$($_.Exception.Message)"
+            Write-Host ("Smoke check failed: " + \$_.Exception.Message)
           }
         """
       }
