@@ -159,7 +159,7 @@ module.exports = {
             try {
               $who = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
               & icacls $keySecure /inheritance:r | Out-Null
-              & icacls $keySecure /grant:r "$who:(R)" "SYSTEM:(R)" "BUILTIN\\Administrators:(R)" | Out-Null
+              & icacls $keySecure /grant:r "${who}:(R)" "SYSTEM:(R)" "BUILTIN\\Administrators:(R)" | Out-Null
             } catch {
               throw "Failed to secure SSH key ACLs: $($_.Exception.Message)"
             }
