@@ -177,7 +177,31 @@ module.exports = {
               # 로그 출력(PS5.1 안전)
               $printed = ""
               foreach ($a in $arguments) { $printed += "[$a] " }
+
               Write-Host ("RUN: {0} {1}" -f $exe, $printed.Trim())
+
+              # PS 5.1?먯꽌 native stderr ?→? non-terminating error(NativeCommandError)?로 잡히는 케이스가 있어
+              # Start-Process + redirect로 stdout/stderr를 안전하게 수집하고 ExitCode로 성공/실패를 판정한다.
+              $outFile = [System.IO.Path]::GetTempFileName()
+              $errFile = [System.IO.Path]::GetTempFileName()
+              try {
+                $p = Start-Process -FilePath $cmd.Source -ArgumentList $arguments -NoNewWindow -Wait -PassThru `
+                  -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+
+                @(Get-Content -LiteralPath $outFile -ErrorAction SilentlyContinue) | ForEach-Object { Write-Host $_ }
+                @(Get-Content -LiteralPath $errFile -ErrorAction SilentlyContinue) | ForEach-Object { Write-Host $_ }
+
+                $exit = [int]$p.ExitCode
+                if ($exit -ne 0) {
+                  throw "Command failed ($exit): $exe"
+                }
+              }
+              finally {
+                Remove-Item -Force -ErrorAction SilentlyContinue $outFile, $errFile
+                $ErrorActionPreference = $prevEap
+              }
+
+              return
 
               # 실행 + stderr/stdout 합치기
               $output = & $exe @arguments 2>&1
@@ -211,7 +235,7 @@ New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
               '-o', 'ConnectionAttempts=1',
               '-o', 'ServerAliveInterval=15',
               '-o', 'ServerAliveCountMax=2',
-              '-o', 'LogLevel=QUIET',
+              '-o', 'LogLevel=ERROR',
               '-o', 'StrictHostKeyChecking=no',
               '-o', 'UserKnownHostsFile=NUL',
               $dest,
@@ -227,7 +251,7 @@ New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
               '-o', 'ConnectionAttempts=1',
               '-o', 'ServerAliveInterval=15',
               '-o', 'ServerAliveCountMax=2',
-              '-o', 'LogLevel=QUIET',
+              '-o', 'LogLevel=ERROR',
               '-o', 'StrictHostKeyChecking=no',
               '-o', 'UserKnownHostsFile=NUL',
               $artifact,
@@ -281,7 +305,7 @@ pm2 ls --no-color
               '-o', 'ConnectionAttempts=1',
               '-o', 'ServerAliveInterval=15',
               '-o', 'ServerAliveCountMax=2',
-              '-o', 'LogLevel=QUIET',
+              '-o', 'LogLevel=ERROR',
               '-o', 'StrictHostKeyChecking=no',
               '-o', 'UserKnownHostsFile=NUL',
               $dest,
