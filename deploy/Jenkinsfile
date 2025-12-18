@@ -202,8 +202,36 @@ module.exports = {
                 $p = Start-Process -FilePath $cmd.Source -ArgumentList $arguments -NoNewWindow -Wait -PassThru `
                   -RedirectStandardOutput $outFile -RedirectStandardError $errFile
 
-                @(Get-Content -LiteralPath $outFile -ErrorAction SilentlyContinue) | ForEach-Object { Write-Host $_ }
-                @(Get-Content -LiteralPath $errFile -ErrorAction SilentlyContinue) | ForEach-Object { Write-Host $_ }
+                function Write-TextOrClixml([string]$text) {
+                  if ([string]::IsNullOrWhiteSpace($text)) { return }
+
+                  if ($text -match '^\s*#<\s*CLIXML') {
+                    $xmlText = ($text -replace '^\s*#<\s*CLIXML\s*[\r\n]+', '')
+                    try {
+                      [xml]$x = $xmlText
+                      $nodes = $x.SelectNodes('//S')
+                      foreach ($n in $nodes) {
+                        $t = $n.InnerText -replace '_x000D__x000A_', "`n"
+                        foreach ($line in ($t -split "`r?`n")) {
+                          if ($line -ne '') { Write-Host $line }
+                        }
+                      }
+                      return
+                    } catch {
+                      # fall back to raw text
+                    }
+                  }
+
+                  foreach ($line in ($text -split "`r?`n")) {
+                    if ($line -ne '') { Write-Host $line }
+                  }
+                }
+
+                $stdoutText = [Text.Encoding]::UTF8.GetString(@(Get-Content -LiteralPath $outFile -Encoding Byte -ErrorAction SilentlyContinue))
+                $stderrText = [Text.Encoding]::UTF8.GetString(@(Get-Content -LiteralPath $errFile -Encoding Byte -ErrorAction SilentlyContinue))
+
+                Write-TextOrClixml $stdoutText
+                Write-TextOrClixml $stderrText
 
                 $exit = [int]$p.ExitCode
                 if ($exit -ne 0) {
@@ -237,6 +265,9 @@ module.exports = {
             # 1) 원격 디렉토리 생성
             $mk = @"
 `$ErrorActionPreference = 'Stop'
+`$ProgressPreference = 'SilentlyContinue'
+chcp 65001 | Out-Null
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 New-Item -ItemType Directory -Force -Path '$remoteTmp' | Out-Null
 New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
 "@
@@ -287,6 +318,7 @@ New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
             # 3) 원격 배포
             $deploy = @"
 `$ErrorActionPreference = 'Stop'
+`$ProgressPreference = 'SilentlyContinue'
 chcp 65001 | Out-Null
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
@@ -306,21 +338,68 @@ if (Test-Path `$app) {
 New-Item -ItemType Directory -Force -Path `$app | Out-Null
 tar -xzf `$bundle -C `$app
 
-if (-not (Get-Command pm2 -ErrorAction SilentlyContinue)) { npm i -g pm2 }
-
-Set-Location `$app
-`$env:PORT = `$port
-
-try { pm2 delete `$name 2>`$null | Out-Null } catch { }
-
-if (Test-Path '.\\ecosystem.config.cjs') {
-  pm2 start ecosystem.config.cjs
-} else {
-  pm2 start server.js --name `$name
-}
-
-pm2 save
-pm2 ls --no-color
+ # --- ensure pm2 is available (PATH-independent) ---
+ `$pm2Cmd = Get-Command pm2 -ErrorAction SilentlyContinue
+ `$pm2Exe = `$null
+ if (`$pm2Cmd) {
+   `$pm2Exe = `$pm2Cmd.Source
+ } else {
+   `$pm2Candidates = @(
+     (Join-Path `$env:APPDATA 'npm\\pm2.cmd'),
+     ('C:\\Users\\' + `$env:USERNAME + '\\AppData\\Roaming\\npm\\pm2.cmd'),
+     'C:\\ProgramData\\npm\\pm2.cmd',
+     'C:\\Program Files\\nodejs\\pm2.cmd',
+     'C:\\Program Files (x86)\\nodejs\\pm2.cmd'
+   )
+   foreach (`$c in `$pm2Candidates) { if (Test-Path `$c) { `$pm2Exe = `$c; break } }
+ }
+ 
+ if (-not `$pm2Exe) {
+   `$npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+   `$npmExe = `$null
+   if (`$npmCmd) {
+     `$npmExe = `$npmCmd.Source
+   } else {
+     `$npmCandidates = @(
+       (Join-Path `$env:APPDATA 'npm\\npm.cmd'),
+       ('C:\\Users\\' + `$env:USERNAME + '\\AppData\\Roaming\\npm\\npm.cmd'),
+       'C:\\ProgramData\\npm\\npm.cmd',
+       'C:\\Program Files\\nodejs\\npm.cmd',
+       'C:\\Program Files (x86)\\nodejs\\npm.cmd'
+     )
+     foreach (`$c in `$npmCandidates) { if (Test-Path `$c) { `$npmExe = `$c; break } }
+   }
+ 
+   if (-not `$npmExe) {
+     throw "pm2 not found and npm not found on UMPC. Install Node.js (with npm) or preinstall pm2 and ensure PATH is set."
+   }
+ 
+   & `$npmExe i -g pm2
+   `$pm2Cmd = Get-Command pm2 -ErrorAction SilentlyContinue
+   if (`$pm2Cmd) {
+     `$pm2Exe = `$pm2Cmd.Source
+   } else {
+     foreach (`$c in `$pm2Candidates) { if (Test-Path `$c) { `$pm2Exe = `$c; break } }
+   }
+ 
+   if (-not `$pm2Exe) {
+     throw "pm2 installed but executable still not found. Ensure npm global bin is on PATH."
+   }
+ }
+ 
+ Set-Location `$app
+ `$env:PORT = `$port
+ 
+ try { & `$pm2Exe delete `$name 2>`$null | Out-Null } catch { }
+ 
+ if (Test-Path '.\\ecosystem.config.cjs') {
+   & `$pm2Exe start ecosystem.config.cjs
+ } else {
+   & `$pm2Exe start server.js --name `$name
+ }
+ 
+ & `$pm2Exe save
+ & `$pm2Exe ls --no-color
 "@
             $deployB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($deploy))
 
