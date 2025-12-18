@@ -151,6 +151,20 @@ module.exports = {
               throw "SSH key file not found: [$key]"
             }
 
+            # OpenSSH (Windows) rejects keys with permissive ACLs (UNPROTECTED PRIVATE KEY FILE).
+            # Jenkins writes credentials to a temp file that can be "too open", so copy + lock it down.
+            $keySecure = $null
+            $keySecure = Join-Path $env:TEMP ("jenkins_sshkey_" + ([guid]::NewGuid().ToString('N')))
+            Copy-Item -Force -LiteralPath $key -Destination $keySecure
+            try {
+              $who = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+              & icacls $keySecure /inheritance:r | Out-Null
+              & icacls $keySecure /grant:r "$who:(R)" "SYSTEM:(R)" "BUILTIN\\Administrators:(R)" | Out-Null
+            } catch {
+              throw "Failed to secure SSH key ACLs: $($_.Exception.Message)"
+            }
+            $key = $keySecure
+
             $remoteTmp = [string]$env:REMOTE_TMP
             $appDir    = [string]$env:UMPC_APP_DIR
             $appName   = [string]$env:UMPC_APP_NAME
@@ -228,8 +242,10 @@ New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
 "@
             $mkB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($mk))
 
+            try {
             Run-External 'ssh' @(
               '-i', $key,
+              '-o', 'IdentitiesOnly=yes',
               '-o', 'BatchMode=yes',
               '-o', 'ConnectTimeout=10',
               '-o', 'ConnectionAttempts=1',
@@ -246,6 +262,7 @@ New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
             # 2) 아티팩트 업로드
             Run-External 'scp' @(
               '-i', $key,
+              '-o', 'IdentitiesOnly=yes',
               '-o', 'BatchMode=yes',
               '-o', 'ConnectTimeout=10',
               '-o', 'ConnectionAttempts=1',
@@ -300,6 +317,7 @@ pm2 ls --no-color
 
             Run-External 'ssh' @(
               '-i', $key,
+              '-o', 'IdentitiesOnly=yes',
               '-o', 'BatchMode=yes',
               '-o', 'ConnectTimeout=10',
               '-o', 'ConnectionAttempts=1',
@@ -312,6 +330,12 @@ pm2 ls --no-color
               'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
               '-EncodedCommand', $deployB64
             )
+            }
+            finally {
+              if ($keySecure -and (Test-Path -LiteralPath $keySecure)) {
+                Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath $keySecure
+              }
+            }
           '''
         }
       }
