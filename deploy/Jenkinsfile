@@ -205,8 +205,9 @@ module.exports = {
                 function Write-TextOrClixml([string]$text) {
                   if ([string]::IsNullOrWhiteSpace($text)) { return }
 
-                  if ($text -match '^\s*#<\s*CLIXML') {
-                    $xmlText = ($text -replace '^\s*#<\s*CLIXML\s*[\r\n]+', '')
+                  # NOTE: this Jenkinsfile is parsed by Groovy; backslashes in regex literals must be escaped (\\s, \\r, \\n).
+                  if ($text -match '^\\s*#<\\s*CLIXML') {
+                    $xmlText = ($text -replace '^\\s*#<\\s*CLIXML\\s*[\\r\\n]+', '')
                     try {
                       [xml]$x = $xmlText
                       $nodes = $x.SelectNodes('//S')
