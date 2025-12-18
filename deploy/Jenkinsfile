@@ -166,6 +166,8 @@ module.exports = {
             Write-Host "SSH_KEY=[****]"
 
             function Run-External([string]$exe, [object[]]$arguments) {
+              $prevEap = $ErrorActionPreference
+              $ErrorActionPreference = 'Continue'
               # exe 존재 확인 (PATH 문제면 여기서 바로 잡힘)
               $cmd = Get-Command $exe -ErrorAction SilentlyContinue
               if (-not $cmd) {
@@ -185,6 +187,7 @@ module.exports = {
 
               foreach ($line in $output) { Write-Host $line }
 
+              $ErrorActionPreference = $prevEap
               if ($exit -ne 0) {
                 throw "Command failed ($exit): $exe"
               }
@@ -208,6 +211,7 @@ New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
               '-o', 'ConnectionAttempts=1',
               '-o', 'ServerAliveInterval=15',
               '-o', 'ServerAliveCountMax=2',
+              '-o', 'LogLevel=ERROR',
               '-o', 'StrictHostKeyChecking=no',
               '-o', 'UserKnownHostsFile=NUL',
               $dest,
@@ -223,6 +227,7 @@ New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
               '-o', 'ConnectionAttempts=1',
               '-o', 'ServerAliveInterval=15',
               '-o', 'ServerAliveCountMax=2',
+              '-o', 'LogLevel=ERROR',
               '-o', 'StrictHostKeyChecking=no',
               '-o', 'UserKnownHostsFile=NUL',
               $artifact,
@@ -276,6 +281,7 @@ pm2 ls --no-color
               '-o', 'ConnectionAttempts=1',
               '-o', 'ServerAliveInterval=15',
               '-o', 'ServerAliveCountMax=2',
+              '-o', 'LogLevel=ERROR',
               '-o', 'StrictHostKeyChecking=no',
               '-o', 'UserKnownHostsFile=NUL',
               $dest,
