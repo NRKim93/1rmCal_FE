@@ -333,119 +333,159 @@ New-Item -ItemType Directory -Force -Path '$appDir'    | Out-Null
             )
 
             # 3) 원격 배포
-            $deploy = @"
-`$ErrorActionPreference = 'Stop'
-`$ProgressPreference = 'SilentlyContinue'
-chcp 65001 | Out-Null
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
+                        $body = @'
+ $ErrorActionPreference = 'Stop'
+ $ProgressPreference = 'SilentlyContinue'
+ chcp 65001 | Out-Null
+ [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-`$tmp    = '$remoteTmp'
-`$app    = '$appDir'
-`$name   = '$appName'
-`$port   = '$port'
-`$bundle = Join-Path `$tmp '$artifact'
+$tmp    = '__REMOTE_TMP__'
+$app    = '__APP_DIR__'
+$name   = '__APP_NAME__'
+$port   = '__APP_PORT__'
+$artifact = '__ARTIFACT__'
 
-if (!(Test-Path `$bundle)) { throw ('bundle missing: ' + `$bundle) }
+$bundle = Join-Path $tmp $artifact
 
-if (Test-Path `$app) {
-  `$bk = `$app + '.backup.' + (Get-Date -Format yyyyMMdd_HHmmss)
-  Move-Item -Force `$app `$bk
+if (!(Test-Path $bundle)) { throw ('bundle missing: ' + $bundle) }
+
+if (Test-Path $app) {
+  $bk = $app + '.backup.' + (Get-Date -Format yyyyMMdd_HHmmss)
+  Move-Item -Force $app $bk
 }
 
-New-Item -ItemType Directory -Force -Path `$app | Out-Null
-tar -xzf `$bundle -C `$app
+New-Item -ItemType Directory -Force -Path $app | Out-Null
+tar -xzf $bundle -C $app
 
  # --- ensure pm2 is available (PATH-independent) ---
- `$pm2Cmd = Get-Command pm2 -ErrorAction SilentlyContinue
- `$pm2Exe = `$null
- if (`$pm2Cmd) {
-   `$pm2Exe = `$pm2Cmd.Source
+ $pm2Cmd = Get-Command pm2 -ErrorAction SilentlyContinue
+ $pm2Exe = $null
+ if ($pm2Cmd) {
+   $pm2Exe = $pm2Cmd.Source
  } else {
-   `$pm2Candidates = @(
-     (Join-Path `$env:APPDATA 'npm\\pm2.cmd'),
-     ('C:\\Users\\' + `$env:USERNAME + '\\AppData\\Roaming\\npm\\pm2.cmd'),
-     'C:\\ProgramData\\npm\\pm2.cmd',
-     'C:\\Program Files\\nodejs\\pm2.cmd',
-     'C:\\Program Files (x86)\\nodejs\\pm2.cmd'
+   $pm2Candidates = @(
+     (Join-Path $env:APPDATA 'npm/pm2.cmd'),
+     ('C:/Users/' + $env:USERNAME + '/AppData/Roaming/npm/pm2.cmd'),
+     'C:/ProgramData/npm/pm2.cmd',
+     'C:/Program Files/nodejs/pm2.cmd',
+     'C:/Program Files (x86)/nodejs/pm2.cmd'
    )
-   foreach (`$c in `$pm2Candidates) { if (Test-Path `$c) { `$pm2Exe = `$c; break } }
+   foreach ($c in $pm2Candidates) { if (Test-Path $c) { $pm2Exe = $c; break } }
  }
  
- if (-not `$pm2Exe) {
-   `$npmCmd = Get-Command npm -ErrorAction SilentlyContinue
-   `$npmExe = `$null
-   if (`$npmCmd) {
-     `$npmExe = `$npmCmd.Source
+ if (-not $pm2Exe) {
+   $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+   $npmExe = $null
+   if ($npmCmd) {
+     $npmExe = $npmCmd.Source
    } else {
-     `$npmCandidates = @(
-       (Join-Path `$env:APPDATA 'npm\\npm.cmd'),
-       ('C:\\Users\\' + `$env:USERNAME + '\\AppData\\Roaming\\npm\\npm.cmd'),
-       'C:\\ProgramData\\npm\\npm.cmd',
-       'C:\\Program Files\\nodejs\\npm.cmd',
-       'C:\\Program Files (x86)\\nodejs\\npm.cmd'
+     $npmCandidates = @(
+       (Join-Path $env:APPDATA 'npm/npm.cmd'),
+       ('C:/Users/' + $env:USERNAME + '/AppData/Roaming/npm/npm.cmd'),
+       'C:/ProgramData/npm/npm.cmd',
+       'C:/Program Files/nodejs/npm.cmd',
+       'C:/Program Files (x86)/nodejs/npm.cmd'
      )
-     foreach (`$c in `$npmCandidates) { if (Test-Path `$c) { `$npmExe = `$c; break } }
+     foreach ($c in $npmCandidates) { if (Test-Path $c) { $npmExe = $c; break } }
    }
  
-   if (-not `$npmExe) {
+   if (-not $npmExe) {
      throw "pm2 not found and npm not found on UMPC. Install Node.js (with npm) or preinstall pm2 and ensure PATH is set."
    }
  
-   & `$npmExe i -g pm2
-   `$pm2Cmd = Get-Command pm2 -ErrorAction SilentlyContinue
-   if (`$pm2Cmd) {
-     `$pm2Exe = `$pm2Cmd.Source
+   & $npmExe i -g pm2
+   $pm2Cmd = Get-Command pm2 -ErrorAction SilentlyContinue
+   if ($pm2Cmd) {
+     $pm2Exe = $pm2Cmd.Source
    } else {
-     foreach (`$c in `$pm2Candidates) { if (Test-Path `$c) { `$pm2Exe = `$c; break } }
+     foreach ($c in $pm2Candidates) { if (Test-Path $c) { $pm2Exe = $c; break } }
    }
  
-   if (-not `$pm2Exe) {
+   if (-not $pm2Exe) {
      throw "pm2 installed but executable still not found. Ensure npm global bin is on PATH."
    }
  }
  
- Set-Location `$app
- `$env:PORT = `$port
+ Set-Location $app
+ $env:PORT = $port
 
  # --- pre-stop: kill process using port (before pm2 start) ---
  try {
-   `$pids = @()
+   $pids = @()
    if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
-     `$pids = Get-NetTCPConnection -LocalPort `$port -State Listen -ErrorAction SilentlyContinue |
+     $pids = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
        Select-Object -ExpandProperty OwningProcess -Unique
    } else {
-     `$re = ":`$port\\s+.*LISTENING\\s+(\\d+)$"
-     `$pids = netstat -ano -p tcp | Select-String -Pattern `$re |
-       ForEach-Object { [int]`$_.Matches[0].Groups[1].Value } | Select-Object -Unique
+     $re = "$port\s+.*LISTENING\s+(\d+)$"
+     $pids = netstat -ano -p tcp | Select-String -Pattern $re |
+       ForEach-Object { [int]$_.Matches[0].Groups[1].Value } | Select-Object -Unique
    }
 
-   foreach (`$pid in `$pids) {
-     if (`$pid -and `$pid -ne `$PID) {
+   foreach ($pid in $pids) {
+     if ($pid -and $pid -ne $PID) {
        try {
-         Stop-Process -Id `$pid -Force -ErrorAction Stop
-         Write-Host "Killed PID `$pid on port `$port"
+         Stop-Process -Id $pid -Force -ErrorAction Stop
+         Write-Host "Killed PID $pid on port $port"
        } catch {
-         cmd /c "taskkill /PID `$pid /F" | Out-Null
-         Write-Host "Taskkilled PID `$pid on port `$port"
+         cmd /c "taskkill /PID $pid /F" | Out-Null
+         Write-Host "Taskkilled PID $pid on port $port"
        }
      }
    }
  } catch {
-   Write-Host ("Pre-stop kill failed: " + `$_.Exception.Message)
+   Write-Host ("Pre-stop kill failed: " + $_.Exception.Message)
  }
   
- try { & `$pm2Exe delete `$name 2>`$null | Out-Null } catch { }
+ try { & $pm2Exe delete $name 2>$null | Out-Null } catch { }
  
- if (Test-Path '.\\ecosystem.config.cjs') {
-   & `$pm2Exe start ecosystem.config.cjs
+ if (Test-Path './ecosystem.config.cjs') {
+   & $pm2Exe start ecosystem.config.cjs
  } else {
-   & `$pm2Exe start server.js --name `$name
+   & $pm2Exe start server.js --name $name
  }
  
- & `$pm2Exe save
- & `$pm2Exe ls --no-color
-"@
-            $deployB64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($deploy))
+ & $pm2Exe save
+ & $pm2Exe ls --no-color
+'@
+
+            $body = $body.Replace('__REMOTE_TMP__', $remoteTmp)
+            $body = $body.Replace('__APP_DIR__', $appDir)
+            $body = $body.Replace('__APP_NAME__', $appName)
+            $body = $body.Replace('__APP_PORT__', $port)
+            $body = $body.Replace('__ARTIFACT__', $artifact)
+
+            # Passing a huge -EncodedCommand to ssh can exceed Windows' command line length limit.
+            # Instead, upload a .ps1 and run it with -File on the remote host.
+            $deploy = @'
+try {
+'@ + $body + @'
+} catch {
+  $msg = ($_ | Out-String)
+  try { $msg += "`n" + ($_.ScriptStackTrace | Out-String) } catch { }
+  $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($msg))
+  Write-Output ("REMOTE_ERROR_B64:" + $b64)
+  exit 1
+}
+'@
+
+            $deployLocal = Join-Path $env:TEMP ("jenkins_deploy_" + ([guid]::NewGuid().ToString('N')) + ".ps1")
+            $deployRemote = "$remoteTmp/deploy.ps1"
+            $deploy | Out-File -FilePath $deployLocal -Encoding utf8 -Force
+
+            Run-External 'scp' @(
+              '-i', $key,
+              '-o', 'IdentitiesOnly=yes',
+              '-o', 'BatchMode=yes',
+              '-o', 'ConnectTimeout=10',
+              '-o', 'ConnectionAttempts=1',
+              '-o', 'ServerAliveInterval=15',
+              '-o', 'ServerAliveCountMax=2',
+              '-o', 'LogLevel=ERROR',
+              '-o', 'StrictHostKeyChecking=no',
+              '-o', 'UserKnownHostsFile=NUL',
+              $deployLocal,
+              "${dest}:$deployRemote"
+            )
 
             Run-External 'ssh' @(
               '-i', $key,
@@ -460,10 +500,14 @@ tar -xzf `$bundle -C `$app
               '-o', 'UserKnownHostsFile=NUL',
               $dest,
               'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-              '-EncodedCommand', $deployB64
+              '-File', $deployRemote
             )
+
             }
             finally {
+              if ($deployLocal -and (Test-Path -LiteralPath $deployLocal)) {
+                Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath $deployLocal
+              }
               if ($keySecure -and (Test-Path -LiteralPath $keySecure)) {
                 Remove-Item -Force -ErrorAction SilentlyContinue -LiteralPath $keySecure
               }
