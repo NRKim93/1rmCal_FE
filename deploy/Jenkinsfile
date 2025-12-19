@@ -395,7 +395,34 @@ tar -xzf `$bundle -C `$app
  
  Set-Location `$app
  `$env:PORT = `$port
- 
+
+ # --- pre-stop: kill process using port (before pm2 start) ---
+ try {
+   `$pids = @()
+   if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+     `$pids = Get-NetTCPConnection -LocalPort `$port -State Listen -ErrorAction SilentlyContinue |
+       Select-Object -ExpandProperty OwningProcess -Unique
+   } else {
+     `$re = ":`$port\\s+.*LISTENING\\s+(\\d+)$"
+     `$pids = netstat -ano -p tcp | Select-String -Pattern `$re |
+       ForEach-Object { [int]`$_.Matches[0].Groups[1].Value } | Select-Object -Unique
+   }
+
+   foreach (`$pid in `$pids) {
+     if (`$pid -and `$pid -ne `$PID) {
+       try {
+         Stop-Process -Id `$pid -Force -ErrorAction Stop
+         Write-Host "Killed PID `$pid on port `$port"
+       } catch {
+         cmd /c "taskkill /PID `$pid /F" | Out-Null
+         Write-Host "Taskkilled PID `$pid on port `$port"
+       }
+     }
+   }
+ } catch {
+   Write-Host ("Pre-stop kill failed: " + `$_.Exception.Message)
+ }
+  
  try { & `$pm2Exe delete `$name 2>`$null | Out-Null } catch { }
  
  if (Test-Path '.\\ecosystem.config.cjs') {
