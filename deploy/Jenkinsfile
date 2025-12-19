@@ -206,6 +206,15 @@ module.exports = {
               try {
                 $p = Start-Process -FilePath $cmd.Source -ArgumentList $arguments -NoNewWindow -Wait -PassThru `
                   -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+                function Decode-Bytes([byte[]]$bytes) {
+                  if (-not $bytes -or $bytes.Length -eq 0) { return '' }
+                  $utf8 = New-Object System.Text.UTF8Encoding($false, $true)
+                  try { return $utf8.GetString($bytes) } catch { }
+                  try { return [Text.Encoding]::GetEncoding(949).GetString($bytes) } catch { }
+                  return [Text.Encoding]::Default.GetString($bytes)
+                }
+
+
 
                 function Write-TextOrClixml([string]$text) {
                   if ([string]::IsNullOrWhiteSpace($text)) { return }
@@ -233,8 +242,10 @@ module.exports = {
                   }
                 }
 
-                $stdoutText = [Text.Encoding]::UTF8.GetString(@(Get-Content -LiteralPath $outFile -Encoding Byte -ErrorAction SilentlyContinue))
-                $stderrText = [Text.Encoding]::UTF8.GetString(@(Get-Content -LiteralPath $errFile -Encoding Byte -ErrorAction SilentlyContinue))
+                $stdoutBytes = @(Get-Content -LiteralPath $outFile -Encoding Byte -ErrorAction SilentlyContinue)
+                $stderrBytes = @(Get-Content -LiteralPath $errFile -Encoding Byte -ErrorAction SilentlyContinue)
+                $stdoutText = Decode-Bytes $stdoutBytes
+                $stderrText = Decode-Bytes $stderrBytes
 
                 Write-TextOrClixml $stdoutText
                 Write-TextOrClixml $stderrText
