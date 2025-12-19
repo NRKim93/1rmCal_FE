@@ -416,7 +416,7 @@ tar -xzf $bundle -C $app
      $pids = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
        Select-Object -ExpandProperty OwningProcess -Unique
    } else {
-     $re = "$port\s+.*LISTENING\s+(\d+)$"
+    $re = ":$port\\s+.*LISTENING\\s+(\\d+)$"
      $pids = netstat -ano -p tcp | Select-String -Pattern $re |
        ForEach-Object { [int]$_.Matches[0].Groups[1].Value } | Select-Object -Unique
    }
