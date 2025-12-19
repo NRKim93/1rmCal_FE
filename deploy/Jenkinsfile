@@ -14,6 +14,7 @@ pipeline {
 
     // Build output
     ARTIFACT_NAME = 'deploy_bundle.tar.gz'
+    FE_ENV_CRED_ID = 'the-gym-fe-env'
 
     // UMPC target
     UMPC_HOST     = '172.30.1.24'
@@ -45,10 +46,13 @@ pipeline {
 
     stage('Install & Build Next.js (Windows)') {
       steps {
-        powershell """
+        withCredentials([file(credentialsId: "${env.FE_ENV_CRED_ID}", variable: 'FRONT_ENV_FILE')]) {
+          powershell """
           \$ErrorActionPreference = 'Stop'
           chcp 65001 | Out-Null
           [Console]::OutputEncoding = [Text.Encoding]::UTF8
+
+          Copy-Item -Force "\$env:FRONT_ENV_FILE" ".env.production"
 
           # ✅ parameter에서 안전하게 읽기 (env로 읽지 말 것)
           \$cleanBuild = [System.Convert]::ToBoolean('${params.CLEAN_BUILD}')
@@ -67,6 +71,7 @@ pipeline {
           if (!(Test-Path '.next\\standalone')) { throw 'Missing .next\\standalone (set output: standalone)' }
           if (!(Test-Path '.next\\static'))     { throw 'Missing .next\\static' }
         """
+        }
       }
     }
 
