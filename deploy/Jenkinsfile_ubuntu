@@ -70,8 +70,14 @@ pipeline {
           mkdir -p deploy_bundle
 
           cp -R .next/standalone/. deploy_bundle/
-          mkdir -p deploy_bundle/.next/static
-          cp -R .next/static/* deploy_bundle/.next/static/
+          mkdir -p deploy_bundle/.next
+          cp -R .next/BUILD_ID \
+            .next/prerender-manifest.json \
+            .next/required-server-files.json \
+            .next/route-manifest.json \
+            .next/server \
+            .next/static \
+            deploy_bundle/.next/
 
           if [ -d public ]; then
             mkdir -p deploy_bundle/public
