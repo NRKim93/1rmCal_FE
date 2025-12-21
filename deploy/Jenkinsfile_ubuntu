@@ -16,7 +16,6 @@ pipeline {
 
     UMPC_HOST     = '172.30.1.24'
     REMOTE_TMP    = '/tmp/the-gym-fe'
-    UMPC_APP_DIR  = '/opt/the-gym-fe'
     UMPC_APP_NAME = 'the-gym-fe'
     APP_PORT      = '3000'
 
@@ -120,6 +119,7 @@ EOF
 
             DEST="${SSH_USER}@${UMPC_HOST}"
             REMOTE_TGZ="${REMOTE_TMP}/${ARTIFACT_NAME}"
+            APP_DIR="/home/${SSH_USER}/apps/${UMPC_APP_NAME}"
 
             ssh -i "$SSH_KEY" \
               -o IdentitiesOnly=yes \
@@ -131,7 +131,7 @@ EOF
               -o LogLevel=ERROR \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
-              "$DEST" "mkdir -p '${REMOTE_TMP}' '${UMPC_APP_DIR}'"
+              "$DEST" "mkdir -p '${REMOTE_TMP}' '${APP_DIR}'"
 
             scp -i "$SSH_KEY" \
               -o IdentitiesOnly=yes \
@@ -156,7 +156,7 @@ EOF
               -o LogLevel=ERROR \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
-              "$DEST" "bash -s" -- "${REMOTE_TMP}" "${UMPC_APP_DIR}" "${UMPC_APP_NAME}" "${APP_PORT}" "${ARTIFACT_NAME}" <<'EOSSH'
+              "$DEST" "bash -s" -- "${REMOTE_TMP}" "${APP_DIR}" "${UMPC_APP_NAME}" "${APP_PORT}" "${ARTIFACT_NAME}" <<'EOSSH'
 set -euo pipefail
 
 remote_tmp="$1"
