@@ -79,6 +79,11 @@ pipeline {
             .next/static \
             deploy_bundle/.next/
 
+          test -f deploy_bundle/.next/BUILD_ID
+          test -f deploy_bundle/.next/required-server-files.json
+          test -d deploy_bundle/.next/server
+          test -d deploy_bundle/.next/static
+
           if [ -d public ]; then
             mkdir -p deploy_bundle/public
             cp -R public/* deploy_bundle/public/
@@ -182,6 +187,11 @@ tar -xzf "$bundle" -C "$app_dir"
 
 cd "$app_dir"
 export PORT="$app_port"
+
+test -f ".next/BUILD_ID"
+test -f ".next/required-server-files.json"
+test -d ".next/server"
+test -d ".next/static"
 
 if ! command -v pm2 >/dev/null 2>&1; then
   if ! command -v npm >/dev/null 2>&1; then
