@@ -42,8 +42,7 @@ pipeline {
     stage('Install & Build Next.js (Ubuntu)') {
       steps {
         withCredentials([file(credentialsId: "${env.FE_ENV_CRED_ID}", variable: 'FRONT_ENV_FILE')]) {
-          sh '''
-            #!/usr/bin/env bash
+          sh(script: '''
             set -euo pipefail
             cp -f "$FRONT_ENV_FILE" ".env.production"
 
@@ -59,15 +58,14 @@ pipeline {
 
             test -d .next/standalone
             test -d .next/static
-          '''
+          ''', shell: '/bin/bash')
         }
       }
     }
 
     stage('Package Artifact (Ubuntu)') {
       steps {
-        sh '''
-          #!/usr/bin/env bash
+        sh(script: '''
           set -euo pipefail
           rm -rf deploy_bundle
           mkdir -p deploy_bundle
@@ -99,7 +97,7 @@ EOF
 
           test -f "${ARTIFACT_NAME}"
           ls -l "${ARTIFACT_NAME}"
-        '''
+        ''', shell: '/bin/bash')
       }
     }
 
@@ -110,8 +108,7 @@ EOF
           keyFileVariable: 'SSH_KEY',
           usernameVariable: 'SSH_USER'
         )]) {
-          sh '''
-            #!/usr/bin/env bash
+          sh(script: '''
             set -euo pipefail
 
             chmod 600 "$SSH_KEY"
@@ -208,20 +205,19 @@ fi
 pm2 save
 pm2 ls --no-color
 EOSSH
-          '''
+          ''', shell: '/bin/bash')
         }
       }
     }
 
     stage('Smoke Check') {
       steps {
-        sh '''
-          #!/usr/bin/env bash
+        sh(script: '''
           set +e
           url="http://${UMPC_HOST}:${APP_PORT}/"
           echo "Smoke check: $url"
           curl -fsS --max-time 10 "$url" >/dev/null
-        '''
+        ''', shell: '/bin/bash')
       }
     }
 
