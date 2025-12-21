@@ -69,7 +69,7 @@ pipeline {
           rm -rf deploy_bundle
           mkdir -p deploy_bundle
 
-          cp -R .next/standalone/* deploy_bundle/
+          cp -R .next/standalone/. deploy_bundle/
           mkdir -p deploy_bundle/.next/static
           cp -R .next/static/* deploy_bundle/.next/static/
 
