@@ -182,7 +182,7 @@ if ! command -v pm2 >/dev/null 2>&1; then
     echo "pm2 not found and npm not found on target"
     exit 1
   fi
-  npm i -g pm2
+  sudo -n npm i -g pm2
 fi
 
 if command -v lsof >/dev/null 2>&1; then
