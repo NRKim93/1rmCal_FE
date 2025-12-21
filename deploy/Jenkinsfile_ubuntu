@@ -43,6 +43,7 @@ pipeline {
       steps {
         withCredentials([file(credentialsId: "${env.FE_ENV_CRED_ID}", variable: 'FRONT_ENV_FILE')]) {
           sh '''
+            #!/usr/bin/env bash
             set -euo pipefail
             cp -f "$FRONT_ENV_FILE" ".env.production"
 
@@ -66,6 +67,7 @@ pipeline {
     stage('Package Artifact (Ubuntu)') {
       steps {
         sh '''
+          #!/usr/bin/env bash
           set -euo pipefail
           rm -rf deploy_bundle
           mkdir -p deploy_bundle
@@ -109,6 +111,7 @@ EOF
           usernameVariable: 'SSH_USER'
         )]) {
           sh '''
+            #!/usr/bin/env bash
             set -euo pipefail
 
             chmod 600 "$SSH_KEY"
@@ -213,6 +216,7 @@ EOSSH
     stage('Smoke Check') {
       steps {
         sh '''
+          #!/usr/bin/env bash
           set +e
           url="http://${UMPC_HOST}:${APP_PORT}/"
           echo "Smoke check: $url"
