@@ -72,12 +72,16 @@ pipeline {
           cp -R .next/standalone/. deploy_bundle/
           mkdir -p deploy_bundle/.next
           cp -R .next/BUILD_ID \
-            .next/prerender-manifest.json \
             .next/required-server-files.json \
-            .next/route-manifest.json \
             .next/server \
             .next/static \
             deploy_bundle/.next/
+
+          for f in .next/prerender-manifest.json .next/route-manifest.json; do
+            if [ -e "$f" ]; then
+              cp -R "$f" deploy_bundle/.next/
+            fi
+          done
 
           test -f deploy_bundle/.next/BUILD_ID
           test -f deploy_bundle/.next/required-server-files.json
