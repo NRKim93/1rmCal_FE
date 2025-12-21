@@ -1,0 +1,234 @@
+pipeline {
+  agent any
+  options { timestamps() }
+
+  parameters {
+    booleanParam(name: 'CLEAN_BUILD', defaultValue: true, description: 'Clean build (remove node_modules/.next/out)')
+  }
+
+  environment {
+    GIT_REPO_URL       = 'https://github.com/NRKim93/1rmCal_FE.git'
+    GIT_BRANCH         = 'main'
+    GIT_CREDENTIALS_ID = 'github-pat-jenkins'
+
+    ARTIFACT_NAME = 'deploy_bundle.tar.gz'
+    FE_ENV_CRED_ID = 'the-gym-fe-env'
+
+    UMPC_HOST     = '172.30.1.24'
+    REMOTE_TMP    = '/tmp/the-gym-fe'
+    UMPC_APP_DIR  = '/opt/the-gym-fe'
+    UMPC_APP_NAME = 'the-gym-fe'
+    APP_PORT      = '3000'
+
+    UMPC_SSH_CRED_ID = 'umpc-ssh-key'
+  }
+
+  stages {
+    stage('Clean Workspace') {
+      steps { cleanWs() }
+    }
+
+    stage('Checkout Source (GitHub)') {
+      steps {
+        echo "Checkout: ${env.GIT_REPO_URL} (${env.GIT_BRANCH})"
+        checkout([
+          $class: 'GitSCM',
+          branches: [[name: "*/${env.GIT_BRANCH}"]],
+          userRemoteConfigs: [[url: env.GIT_REPO_URL, credentialsId: env.GIT_CREDENTIALS_ID]]
+        ])
+      }
+    }
+
+    stage('Install & Build Next.js (Ubuntu)') {
+      steps {
+        withCredentials([file(credentialsId: "${env.FE_ENV_CRED_ID}", variable: 'FRONT_ENV_FILE')]) {
+          sh '''
+            set -euo pipefail
+            cp -f "$FRONT_ENV_FILE" ".env.production"
+
+            if [ "${CLEAN_BUILD}" = "true" ]; then
+              echo "CLEAN_BUILD enabled"
+              rm -rf node_modules .next out
+            fi
+
+            node -v
+            npm -v
+            npm ci
+            npm run build
+
+            test -d .next/standalone
+            test -d .next/static
+          '''
+        }
+      }
+    }
+
+    stage('Package Artifact (Ubuntu)') {
+      steps {
+        sh '''
+          set -euo pipefail
+          rm -rf deploy_bundle
+          mkdir -p deploy_bundle
+
+          cp -R .next/standalone/* deploy_bundle/
+          mkdir -p deploy_bundle/.next/static
+          cp -R .next/static/* deploy_bundle/.next/static/
+
+          if [ -d public ]; then
+            mkdir -p deploy_bundle/public
+            cp -R public/* deploy_bundle/public/
+          fi
+
+          cat > deploy_bundle/ecosystem.config.cjs <<EOF
+module.exports = {
+  apps: [{
+    name: '${UMPC_APP_NAME}',
+    script: 'server.js',
+    env: {
+      NODE_ENV: 'production',
+      PORT: '${APP_PORT}'
+    }
+  }]
+}
+EOF
+
+          rm -f "${ARTIFACT_NAME}"
+          tar -czf "${ARTIFACT_NAME}" -C deploy_bundle .
+
+          test -f "${ARTIFACT_NAME}"
+          ls -l "${ARTIFACT_NAME}"
+        '''
+      }
+    }
+
+    stage('Deploy to UMPC over SSH') {
+      steps {
+        withCredentials([sshUserPrivateKey(
+          credentialsId: "${env.UMPC_SSH_CRED_ID}",
+          keyFileVariable: 'SSH_KEY',
+          usernameVariable: 'SSH_USER'
+        )]) {
+          sh '''
+            set -euo pipefail
+
+            chmod 600 "$SSH_KEY"
+
+            DEST="${SSH_USER}@${UMPC_HOST}"
+            REMOTE_TGZ="${REMOTE_TMP}/${ARTIFACT_NAME}"
+
+            ssh -i "$SSH_KEY" \
+              -o IdentitiesOnly=yes \
+              -o BatchMode=yes \
+              -o ConnectTimeout=10 \
+              -o ConnectionAttempts=1 \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=2 \
+              -o LogLevel=ERROR \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "$DEST" "mkdir -p '${REMOTE_TMP}' '${UMPC_APP_DIR}'"
+
+            scp -i "$SSH_KEY" \
+              -o IdentitiesOnly=yes \
+              -o BatchMode=yes \
+              -o ConnectTimeout=10 \
+              -o ConnectionAttempts=1 \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=2 \
+              -o LogLevel=ERROR \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "${ARTIFACT_NAME}" \
+              "${DEST}:${REMOTE_TGZ}"
+
+            ssh -i "$SSH_KEY" \
+              -o IdentitiesOnly=yes \
+              -o BatchMode=yes \
+              -o ConnectTimeout=10 \
+              -o ConnectionAttempts=1 \
+              -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=2 \
+              -o LogLevel=ERROR \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "$DEST" "bash -s" -- "${REMOTE_TMP}" "${UMPC_APP_DIR}" "${UMPC_APP_NAME}" "${APP_PORT}" "${ARTIFACT_NAME}" <<'EOSSH'
+set -euo pipefail
+
+remote_tmp="$1"
+app_dir="$2"
+app_name="$3"
+app_port="$4"
+artifact="$5"
+
+bundle="${remote_tmp}/${artifact}"
+if [ ! -f "$bundle" ]; then
+  echo "bundle missing: $bundle"
+  exit 1
+fi
+
+if [ -d "$app_dir" ]; then
+  backup="${app_dir}.backup.$(date +%Y%m%d_%H%M%S)"
+  mv "$app_dir" "$backup"
+fi
+
+mkdir -p "$app_dir"
+tar -xzf "$bundle" -C "$app_dir"
+
+cd "$app_dir"
+export PORT="$app_port"
+
+if ! command -v pm2 >/dev/null 2>&1; then
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "pm2 not found and npm not found on target"
+    exit 1
+  fi
+  npm i -g pm2
+fi
+
+if command -v lsof >/dev/null 2>&1; then
+  pids="$(lsof -ti tcp:"$app_port" || true)"
+  if [ -n "$pids" ]; then
+    echo "$pids" | xargs -r kill -9
+  fi
+elif command -v fuser >/dev/null 2>&1; then
+  fuser -k -n tcp "$app_port" || true
+fi
+
+pm2 delete "$app_name" >/dev/null 2>&1 || true
+
+if [ -f ecosystem.config.cjs ]; then
+  pm2 start ecosystem.config.cjs
+else
+  pm2 start server.js --name "$app_name"
+fi
+
+pm2 save
+pm2 ls --no-color
+EOSSH
+          '''
+        }
+      }
+    }
+
+    stage('Smoke Check') {
+      steps {
+        sh '''
+          set +e
+          url="http://${UMPC_HOST}:${APP_PORT}/"
+          echo "Smoke check: $url"
+          curl -fsS --max-time 10 "$url" >/dev/null
+        '''
+      }
+    }
+
+    stage('Clean Workspace (after)') {
+      steps { cleanWs() }
+    }
+  }
+
+  post {
+    always  { echo 'Pipeline finished.' }
+    success { echo 'Deploy succeeded.' }
+    failure { echo 'Deploy failed.' }
+  }
+}
