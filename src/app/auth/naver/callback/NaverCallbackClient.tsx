@@ -26,7 +26,7 @@ export default function NaverCallbackClient() {
 
     naverLogin(code, state ?? '', mode ?? '')
       .then((response: any) => {
-        if (response.data.data.code === 201) {
+        if (response.data.data === 201) {
           if (mode === 'signup') {
             router.push(`api/v1/auth/naver/nickname?email=${encodeURIComponent(response.data.data)}`);
           } else {
