@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { TrainingSet } from "../../types";
+import { TrainingSet } from "@/lib/types/training";
 
 interface SetTableProps {
   sets: TrainingSet[];

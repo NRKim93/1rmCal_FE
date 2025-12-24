@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/common/Button";
-import { TrainingExercise } from "../../types";
+import { TrainingExercise } from "@/lib/types/training";
 import SetTable from "../SetTable/SetTable";
 
 interface TrainingExerciseCardProps {

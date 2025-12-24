@@ -6,7 +6,7 @@ import { Header } from "@/components/common/Header";
 import { Button } from "@/components/common/Button";
 import TrainingExerciseCard from "./(components)/TrainingExerciseCard/TrainingExerciseCard";
 import TrainingSearchModal from "./(components)/SearchModal/TrainingSearchModal";
-import { TrainingExercise, TrainingSet } from "./types";
+import { TrainingExercise, TrainingSet } from "@/lib/types/training";
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
