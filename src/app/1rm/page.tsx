@@ -22,6 +22,14 @@ export default function OneRMPage() {
   const [oneRM, setOneRM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const regex = new RegExp("^\\d*\\.?\\d*$");
+
+  const handleWeightChange = (value: string) => {
+    if (regex.test(value)) {
+      setWeight(value);
+    }
+  };
+
   const handleUnitChange = (newUnit: "KG" | "LBS") => {
     if (!weight || isNaN(parseFloat(weight))) {
       setUnit(newUnit);
@@ -68,12 +76,6 @@ export default function OneRMPage() {
 
         if (w > 1000) {
             setError('중량이 너무 큽니다. 다시 확인해주세요.');
-            setShowResult(false);
-            return;
-        }
-
-        if (!reps || reps < 1 || reps > 20) {
-            setError('반복 횟수는 1-20 사이여야 합니다.');
             setShowResult(false);
             return;
         }
@@ -197,7 +199,7 @@ export default function OneRMPage() {
           type="text"
           placeholder="중량을 입력하세요"
           value={weight}
-          onChange={e => setWeight(e.target.value)}
+          onChange={e => handleWeightChange(e.target.value)}
           className="mt-2 w-full rounded border border-gray-300 p-3 text-center text-base"
         />
       </div>
