@@ -26,10 +26,10 @@ export default function NaverCallbackClient() {
 
     naverLogin(code, state ?? '', mode ?? '')
       .then((response: any) => {
-        if (response.data.data === 201) {
+        if (response.data.data.code === 201) {
           if (mode === 'signup') {
             // router.push(`api/v1/auth/naver/nickname?email=${encodeURIComponent(response.data.data)}`);
-            router.push(`/auth/naver/nickname`)
+            router.push(`/auth/naver/nickname?email=${encodeURIComponent(response.data.data.email)}`)
           } else {
             alert('등록되지 않은 회원입니다. 회원가입 부탁드립니다.');
             router.push('/');
