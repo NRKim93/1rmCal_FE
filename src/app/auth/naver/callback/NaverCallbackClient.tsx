@@ -31,7 +31,7 @@ export default function NaverCallbackClient() {
             router.push(`api/v1/auth/naver/nickname?email=${encodeURIComponent(response.data.data)}`);
           } else {
             alert('등록되지 않은 회원입니다. 회원가입 부탁드립니다.');
-            router.push('/api/v1/users/setNickname');
+            router.push('api/v1/users/setNickname');
           }
         } else if (response.data.data.code === 200) {
           if (mode === 'signup') {
