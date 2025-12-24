@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RepsTableItem, CalculateResult } from "@/lib/types";
+import Skeleton from "@/components/common/ui/Skeleton";
 
 const EVENTS = [
   "벤치프레스",
@@ -18,6 +19,7 @@ export default function OneRMPage() {
   const [unit, setUnit] = useState("KG");
   const [reps, setReps] = useState(1);
   const [showResult, setShowResult] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<RepsTableItem[]>([]);
   const [oneRM, setOneRM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +83,7 @@ export default function OneRMPage() {
         }
 
         try {
+          setIsLoading(true);
           const backendUrl = process.env.NEXT_PUBLIC_ONERM_URL;
           
           if (!backendUrl) {
@@ -136,6 +139,7 @@ export default function OneRMPage() {
           setShowResult(false);
           console.error('1RM 계산 오류:', error);
         }
+        setIsLoading(false);
     };
 
     // showResult 상태가 true일 때만 계산 실행 (handleStart 클릭 시 true가 됨)
@@ -146,6 +150,7 @@ export default function OneRMPage() {
          setShowResult(false);
          setResult([]);
          setOneRM(null);
+         setIsLoading(false);
     }
 
   }, [event, weight, unit, reps, showResult]);
@@ -159,6 +164,7 @@ export default function OneRMPage() {
     setResult([]);
     setOneRM(null);
     setError(null);
+    setIsLoading(false);
   };
 
   return (
@@ -236,7 +242,24 @@ export default function OneRMPage() {
         >초기화</button>
       </div>
       {/* 결과 표시 */}
-      {showResult && (
+      {isLoading && (
+        <div className="mt-8">
+          <div className="space-y-3">
+            <Skeleton className="mx-auto h-8 w-40" />
+            <div className="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 p-4">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+              {Array.from({ length: 6 }).map((_, index) => (
+                <React.Fragment key={index}>
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-24" />
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {showResult && !isLoading && (
         <div className="mt-8">
           {oneRM !== null && <h2 className="mb-4 text-2xl">측정 결과</h2>}
           <div className="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 p-4">
