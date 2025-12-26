@@ -99,27 +99,6 @@ export default function OneRMPage() {
 
           const response = await onermCal(parseFloat(weight), reps);
 
-          if (!response.data) {
-            let errorMessage = '1RM 계산 중 오류가 발생했습니다.';
-            try {
-              const errorData = await response.data;
-              errorMessage = errorData.message || errorMessage;
-            } catch (parseError) {
-              // JSON 파싱 실패 시 기본 에러 메시지 사용
-              console.warn('에러 응답 파싱 실패:', parseError);
-            }
-            
-            if (response.status === 404) {
-              errorMessage = '1RM 계산 서비스를 찾을 수 없습니다.';
-            } else if (response.status === 500) {
-              errorMessage = '서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
-            } else if (response.status >= 400 && response.status < 500) {
-              errorMessage = '잘못된 요청입니다. 입력값을 확인해주세요.';
-            }
-            
-            throw new Error(errorMessage);
-          }
-
           const data: CalculateResult = await response.data.data;
           
           // 응답 데이터 유효성 검사
@@ -132,10 +111,14 @@ export default function OneRMPage() {
           setError(null);
           setShowResult(true);
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : '1RM 계산 중 오류가 발생했습니다.';
+          const message =                                                                                           
+            error && typeof error === "object" && "response" in error                                               
+            ? (error as any).response?.data?.message                                                              
+            : null;
+          const errorMessage = message || (error instanceof Error ? error.message : "1RM 계산 중 오류가 발생했습니다.");
+
           setError(errorMessage);
-          setShowResult(false);
-          console.error('1RM 계산 오류:', error);
+          setShowResult(false); 
         }
         setIsLoading(false);
     };
