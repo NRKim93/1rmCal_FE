@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RepsTableItem, CalculateResult } from "@/lib/types";
 import Skeleton from "@/components/common/ui/Skeleton";
+import { onermCal } from "@/services/onerm.service";
 
 const EVENTS = [
   "벤치프레스",
@@ -20,6 +21,7 @@ export default function OneRMPage() {
   const [reps, setReps] = useState(1);
   const [showResult, setShowResult] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showIntroSkeleton, setShowIntroSkeleton] = useState(true);
   const [result, setResult] = useState<RepsTableItem[]>([]);
   const [oneRM, setOneRM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +55,11 @@ export default function OneRMPage() {
     setWeight(convertedWeight.toFixed(2));
     setUnit(newUnit);
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowIntroSkeleton(false), 1000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const calculateOnerm = async () => {
@@ -90,21 +97,12 @@ export default function OneRMPage() {
             throw new Error('서버 설정이 완료되지 않았습니다. 관리자에게 문의해주세요.');
           }
 
-          const response = await fetch(backendUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              weight: w,
-              reps: reps
-            })
-          });
+          const response = await onermCal(parseFloat(weight), reps);
 
-          if (!response.ok) {
+          if (!response.data) {
             let errorMessage = '1RM 계산 중 오류가 발생했습니다.';
             try {
-              const errorData = await response.json();
+              const errorData = await response.data;
               errorMessage = errorData.message || errorMessage;
             } catch (parseError) {
               // JSON 파싱 실패 시 기본 에러 메시지 사용
@@ -122,7 +120,7 @@ export default function OneRMPage() {
             throw new Error(errorMessage);
           }
 
-          const data: CalculateResult = await response.json();
+          const data: CalculateResult = await response.data.data;
           
           // 응답 데이터 유효성 검사
           if (!data || typeof data.oneRm !== 'number' || !Array.isArray(data.repsTable)) {
@@ -185,6 +183,31 @@ export default function OneRMPage() {
         </div>
       )}
       {/* 종목 선택 */}
+      {showIntroSkeleton ? (
+        <div className="mt-6 space-y-4">
+          <div className="space-y-2">
+            <Skeleton className="mx-auto h-5 w-24" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="mx-auto h-5 w-40" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+          <div className="mt-8 flex justify-center">
+            <Skeleton className="h-12 w-32" />
+          </div>
+        </div>
+      ) : (
+        <>
       <div className="mb-2 mt-6">
         <label className="mb-1 block font-semibold">종목 선택</label>
         <select
@@ -242,6 +265,8 @@ export default function OneRMPage() {
         >초기화</button>
       </div>
       {/* 결과 표시 */}
+        </>
+      )}
       {isLoading && (
         <div className="mt-8">
           <div className="space-y-3">
