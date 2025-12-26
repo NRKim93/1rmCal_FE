@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { RepsTableItem, CalculateResult } from "@/lib/types";
 import Skeleton from "@/components/common/ui/Skeleton";
 import { onermCal } from "@/services/onerm.service";
+import { hasLogin } from "@/services/auth.service";
 
 const EVENTS = [
   "벤치프레스",
@@ -22,6 +23,7 @@ export default function OneRMPage() {
   const [showResult, setShowResult] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showIntroSkeleton, setShowIntroSkeleton] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [result, setResult] = useState<RepsTableItem[]>([]);
   const [oneRM, setOneRM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +53,16 @@ export default function OneRMPage() {
   useEffect(() => {
     const timer = setTimeout(() => setShowIntroSkeleton(false), 1000);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+
+    const checkLogin = async () => {
+        const loggedIn = localStorage.getItem('isLoggedIn');
+        setIsLoggedIn(loggedIn === 'true');
+    };
+
+    checkLogin();
   }, []);
 
   useEffect(() => {
@@ -239,6 +251,14 @@ export default function OneRMPage() {
           className="rounded bg-red-600 px-8 py-3 text-lg font-semibold text-white hover:bg-red-700"
           onClick={handleReset}
         >초기화</button>
+        {isLoggedIn && (
+          <button
+            type="button"
+            className="rounded bg-gray-800 px-8 py-3 text-lg font-semibold text-white hover:bg-gray-900"
+          >
+            저장
+          </button>
+        )}
       </div>
       {/* 결과 표시 */}
         </>

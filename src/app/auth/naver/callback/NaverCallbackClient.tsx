@@ -28,7 +28,6 @@ export default function NaverCallbackClient() {
       .then((response: any) => {
         if (response.data.data.code === 201) {
           if (mode === 'signup') {
-            // router.push(`api/v1/auth/naver/nickname?email=${encodeURIComponent(response.data.data)}`);
             router.push(`/auth/naver/nickname?email=${encodeURIComponent(response.data.data.email)}`)
           } else {
             alert('등록되지 않은 회원입니다. 회원가입 부탁드립니다.');
@@ -44,6 +43,12 @@ export default function NaverCallbackClient() {
               localStorage.setItem('seq', seq);
               console.log('사용자 ID 저장', seq);
             }
+
+            const isLoggedIn = response.data.data.isLoggedIn; 
+            if (seq) {
+              localStorage.setItem('isLoggedIn', isLoggedIn);
+            }
+
 
             setTimeout(async () => {
               if (await hasLogin()) {
