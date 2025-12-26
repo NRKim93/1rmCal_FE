@@ -26,14 +26,6 @@ export default function OneRMPage() {
   const [oneRM, setOneRM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const regex = new RegExp("^\\d*\\.?\\d*$");
-
-  const handleWeightChange = (value: string) => {
-    if (regex.test(value)) {
-      setWeight(value);
-    }
-  };
-
   const handleUnitChange = (newUnit: "KG" | "LBS") => {
     if (!weight || isNaN(parseFloat(weight))) {
       setUnit(newUnit);
@@ -208,11 +200,12 @@ export default function OneRMPage() {
       <div className="my-4">
         <label className="mb-1 block font-semibold">중량을 입력해 주세요</label>
         <input
-          type="text"
+          type="number"
           placeholder="중량을 입력하세요"
           value={weight}
-          onChange={e => handleWeightChange(e.target.value)}
-          className="mt-2 w-full rounded border border-gray-300 p-3 text-center text-base"
+          onChange={e => setWeight(e.target.value)}
+          className="mt-2 w-full rounded border border-gray-300 p-3 text-center text-base [appearance:textfield]    
+  [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         />
       </div>
       {/* 단위 선택 */}
@@ -230,7 +223,7 @@ export default function OneRMPage() {
       </div>
       {/* 반복 횟수 선택 */}
       <div className="my-4 flex gap-4">
-        {[1, 3, 5].map(n => (
+        {[1, 3, 5, 10].map(n => (
           <button
             key={n}
             type="button"
