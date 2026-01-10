@@ -1,3 +1,4 @@
+import { OneRmHistory } from "@/lib/types/oneRm"
 import instance from "./api"
 
 export const onermCal = async (weight: number, reps: number) => {
@@ -5,3 +6,7 @@ export const onermCal = async (weight: number, reps: number) => {
         params: {weight, reps}
     })
 } 
+
+export const saveOneRm = async (onerm:OneRmHistory) => {
+    return instance.post('/api/v1/onerm/', onerm)
+}

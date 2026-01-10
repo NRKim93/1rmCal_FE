@@ -3,8 +3,9 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RepsTableItem, CalculateResult } from "@/lib/types";
 import Skeleton from "@/components/common/ui/Skeleton";
-import { onermCal } from "@/services/onerm.service";
+import { onermCal, saveOneRm } from "@/services/onerm.service";
 import { hasLogin } from "@/services/auth.service";
+import type { OneRmHistory } from "@/lib/types/oneRm";
 
 const EVENTS = [
   "벤치프레스",
@@ -152,6 +153,39 @@ export default function OneRMPage() {
     setIsLoading(false);
   };
 
+  const handleSave = async () => {
+    const seq = localStorage.getItem("seq");
+    if (!seq) {
+      setError("로그인이 필요합니다.");
+      return;
+    }
+
+    if (!event) {
+      setError("종목을 선택해 주세요.");
+      return;
+    }
+    
+    const w = parseFloat(weight);
+    if (!weight || isNaN(w) || w <= 0) {
+      setError("유효한 중량을 입력해 주세요.");
+      return;
+    }
+
+    const payload: OneRmHistory = {
+      author: seq,
+      trainingName: event,
+      weight: w,
+      unit,
+    };
+
+    try {
+      await saveOneRm(payload);
+      setError(null);
+    } catch (error) {
+      setError("저장 중 오류가 발생했습니다.");
+    }
+  };
+
   return (
     <div className="mx-auto my-10 max-w-[500px] text-center">
       <div className="flex justify-start">
@@ -255,6 +289,7 @@ export default function OneRMPage() {
           <button
             type="button"
             className="rounded bg-gray-800 px-8 py-3 text-lg font-semibold text-white hover:bg-gray-900"
+            onClick={handleSave}
           >
             저장
           </button>
@@ -298,3 +333,4 @@ export default function OneRMPage() {
     </div>
   );
 } 
+

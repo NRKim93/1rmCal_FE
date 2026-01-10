@@ -9,3 +9,11 @@ export interface CalculateResult {
   oneRm: number;
   repsTable: RepsTableItem[];
 }
+
+
+export interface OneRmHistory {
+  author: string;
+  trainingName: string; 
+  weight: number;
+  unit: string; 
+}
