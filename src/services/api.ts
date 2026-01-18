@@ -24,7 +24,7 @@ instance.interceptors.response.use(
     // 401 에러 (인증 실패) 처리
     if (error.response?.status === 401) {
       // 토큰이 만료되었거나 유효하지 않은 경우
-      console.log('인증 실패: 로그인 페이지로 리다이렉트');
+
       // 여기서 로그아웃 처리나 리다이렉트 로직을 추가할 수 있습니다
     }
     

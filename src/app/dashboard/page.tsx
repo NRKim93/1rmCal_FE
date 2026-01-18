@@ -38,7 +38,6 @@ export default function DashboardPage() {
   // };
 
   const handleDateClick = (date: Date) => {
-    console.log('선택한 날짜:', date);
     // TODO: 해당 날짜의 트레이닝 상세 정보 조회 및 표시
   };
 

@@ -41,7 +41,6 @@ export default function NaverCallbackClient() {
             const seq = response.data.data.seq;
             if (seq) {
               localStorage.setItem('seq', seq);
-              console.log('사용자 ID 저장', seq);
             }
 
             const isLoggedIn = response.data.data.isLoggedIn; 
@@ -52,10 +51,8 @@ export default function NaverCallbackClient() {
 
             setTimeout(async () => {
               if (await hasLogin()) {
-                console.log('로그인 성공: 쿠키가 정상적으로 저장되었습니다.');
                 router.push('/dashboard');
               } else {
-                console.error('로그인 실패: 쿠키가 저장되지 않았습니다');
                 alert('로그인 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
                 router.push('/');
               }
