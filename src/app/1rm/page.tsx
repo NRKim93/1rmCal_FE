@@ -1,19 +1,10 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RepsTableItem, CalculateResult } from "@/lib/types";
 import Skeleton from "@/components/common/ui/Skeleton";
-import { onermCal, saveOneRm } from "@/services/onerm.service";
-import { hasLogin } from "@/services/auth.service";
-import type { OneRmHistory } from "@/lib/types/oneRm";
-
-const EVENTS = [
-  "벤치프레스",
-  "스쿼트",
-  "데드리프트(컨벤)",
-  "데드리프트(스모)",
-  "오버헤드프레스"
-];
+import { onermCal, saveOneRm, trainingDropdown } from "@/services/onerm.service";
+import type { OneRmHistory, TrainingDropDown } from "@/lib/types/oneRm";
 
 export default function OneRMPage() {
   const router = useRouter();
@@ -28,6 +19,7 @@ export default function OneRMPage() {
   const [result, setResult] = useState<RepsTableItem[]>([]);
   const [oneRM, setOneRM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trainingOptions, setTrainingOptions] = useState<TrainingDropDown[]>([]);
 
   const handleUnitChange = (newUnit: "KG" | "LBS") => {
     if (!weight || isNaN(parseFloat(weight))) {
@@ -64,6 +56,19 @@ export default function OneRMPage() {
     };
 
     checkLogin();
+  }, []);
+
+  useEffect(() => {
+    const fetchTrainingOptions = async () => {
+      try {
+        const options = await trainingDropdown();
+        setTrainingOptions(options);
+      } catch {
+        setTrainingOptions([]);
+      }
+    };
+
+    fetchTrainingOptions();
   }, []);
 
   useEffect(() => {
@@ -237,8 +242,10 @@ export default function OneRMPage() {
           className="w-full rounded border border-gray-300 bg-white p-3 text-center text-base"
         >
           <option value="">종목을 선택하세요</option>
-          {EVENTS.map(ev => (
-            <option key={ev} value={ev}>{ev}</option>
+          {trainingOptions.map(option => (
+            <option key={option.seq} value={option.trainingName}>
+              {option.trainingDisplayName}
+            </option>
           ))}
         </select>
       </div>
@@ -333,4 +340,3 @@ export default function OneRMPage() {
     </div>
   );
 } 
-
