@@ -1,3 +1,10 @@
+//  드롭다운용 운동 데이터
+export interface TrainingDropDown{
+  seq: number;
+  trainingName: string; 
+  trainingDisplayName: string; 
+}
+
 // 1RM 계산 - 각 횟수별 중량 테이블 항목
 export interface RepsTableItem {
   reps: number;
@@ -9,7 +16,6 @@ export interface CalculateResult {
   oneRm: number;
   repsTable: RepsTableItem[];
 }
-
 
 export interface OneRmHistory {
   author: string;
