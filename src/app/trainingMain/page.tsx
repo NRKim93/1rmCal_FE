@@ -35,7 +35,6 @@ export default function TrainingMainPage() {
     const fetchLatestHistory = async () => {
       try {
         const seqStr = localStorage.getItem('seq');
-        console.log("현재 유저 : " + seqStr);
 
         if(!seqStr) {
           console.error('대상 유저 없음.');
