@@ -33,8 +33,7 @@ export default function TrainingSearchModal({
         setName("");
         onClose();
       }}
-      width="92vw"
-      contentClassName="px-5 py-6 text-left max-w-[480px] w-full"
+      contentClassName="px-5 py-6 text-left w-full"
     >
       <h2 className="mb-4 text-base font-semibold text-gray-900">종목 추가</h2>
 
@@ -45,7 +44,7 @@ export default function TrainingSearchModal({
         id="exerciseName"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="예) BENCHPRESS-BARBELL"
+        placeholder="예) BENCHPRESS"
         className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-500"
       />
 

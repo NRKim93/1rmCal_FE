@@ -9,8 +9,6 @@ export const getLatestHistory = async (seq: number) => {
 };
 
 //  
-export const searchTraining = async (searchTerm:string) => {
-    return await instance.get('/api/v1/training/searchTraining',{
-        params: { searchTerm }
-    })
+export const getAutoComplete = async () => {
+    return await instance.get('/api/v1/training/getAutoComplete');
 };
