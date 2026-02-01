@@ -53,3 +53,10 @@ export type TrainingExercise = {
   restLabel: string;
   sets: TrainingSet[];
 };
+
+//  자동완성용 
+export interface AutoCompleteItem{
+  seq: number;
+  trainingName: string; 
+  trainingDisplayName: string; 
+}

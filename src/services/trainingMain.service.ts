@@ -10,5 +10,6 @@ export const getLatestHistory = async (seq: number) => {
 
 //  
 export const getAutoComplete = async () => {
-    return await instance.get('/api/v1/training/getAutoComplete');
+    const result = await instance.get('/api/v1/training/getAutoComplete');
+    return result.data?.data ?? result.data;
 };
