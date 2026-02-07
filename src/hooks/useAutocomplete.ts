@@ -11,9 +11,9 @@ function normEn(s: string) {
 }
 
 /**
- * 한글/자모 정규화
- * - 호환 자모(ㅂ 등) / 조합형 차이를 줄이기 위해 NFKC 권장
+ * 한글 정규화(음절 검색용)
  * - 공백 제거
+ * - 호환 자모/조합형 차이를 줄이기 위해 NFKC 권장
  */
 function normKo(s: string) {
   const cleaned = (s ?? "").replace(/\s+/g, "").trim();
@@ -25,15 +25,49 @@ function hasKorean(s: string) {
   return /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(s);
 }
 
+/** ✅ 초성 테이블 */
+const CHO = [
+  "ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"
+] as const;
+
+/** ✅ 한글 음절 -> 초성 문자열 */
+function toChosung(str: string) {
+  const s = (str ?? "").replace(/\s+/g, "");
+  let out = "";
+
+  for (const ch of s) {
+    const code = ch.charCodeAt(0);
+
+    // 한글 음절(가-힣)
+    if (code >= 0xac00 && code <= 0xd7a3) {
+      const idx = code - 0xac00;
+      out += CHO[Math.floor(idx / 588)] ?? "";
+      continue;
+    }
+
+    // 이미 자음(ㄱ-ㅎ)이면 그대로
+    if (ch >= "ㄱ" && ch <= "ㅎ") {
+      out += ch;
+      continue;
+    }
+  }
+
+  return out;
+}
+
+/** ✅ 입력이 "자음만"인지(ㅂ, ㄷㅂ, ㅂㅊ 등) */
+function isChosungQuery(q: string) {
+  const t = q.replace(/\s+/g, "");
+  return t.length > 0 && /^[ㄱ-ㅎ]+$/.test(t);
+}
+
 type IndexedItem = AutoCompleteItem & {
   _en: string;
   _ko: string;
+  _cho: string; // ✅ 초성 인덱스 추가
 };
 
-export function useAutoComplete(options?: {
-  enabled?: boolean;
-  limit?: number;
-}) {
+export function useAutoComplete(options?: { enabled?: boolean; limit?: number }) {
   const enabled = options?.enabled ?? true;
   const limit = options?.limit ?? 30;
 
@@ -43,14 +77,17 @@ export function useAutoComplete(options?: {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // 인덱스: 한 번만 만들어두고 재사용
+  // ✅ 인덱스: 한 번만 만들어두고 재사용
   const indexed = useMemo<IndexedItem[]>(() => {
-    return list.map((x) => ({
-      ...x,
-      _en: normEn(x.trainingName),
-      // displayName + name까지 같이 인덱싱(표시명이 비어있거나 혼용된 경우 커버)
-      _ko: normKo(`${x.trainingDisplayName ?? ""}${x.trainingName ?? ""}`),
-    }));
+    return list.map((x) => {
+      const display = x.trainingDisplayName || x.trainingName || "";
+      return {
+        ...x,
+        _en: normEn(x.trainingName),
+        _ko: normKo(`${display}${x.trainingName ?? ""}`), // 음절 검색용
+        _cho: toChosung(display),                         // ✅ 초성 검색용
+      };
+    });
   }, [list]);
 
   const results = useMemo<AutoCompleteItem[]>(() => {
@@ -61,19 +98,28 @@ export function useAutoComplete(options?: {
     const qKo = normKo(q);
     const qEn = normEn(q);
 
+    // ✅ 초성 모드(자음만 입력)
+    const qCho = q.replace(/\s+/g, "");
+    const choMode = isChosungQuery(qCho);
+
     const scored = indexed
       .map((x) => {
         let score = 0;
 
-        // ✅ 한글 입력이면 한글 인덱스를 우선으로 점수
+        // ✅ 1) 초성 검색: "ㅂ" -> "벤치프레스(ㅂㅊㅍㄹㅅ)" 매칭
+        if (choMode) {
+          if (x._cho.includes(qCho)) score += 120; // 초성은 최우선
+          // 영문도 같이 치는 경우 대비
+          if (qEn && x._en.includes(qEn)) score += 10;
+          return { x, score };
+        }
+
+        // ✅ 2) 일반 검색: 한글(음절) + 영문
         if (korean) {
           if (qKo && x._ko.includes(qKo)) score += 100;
-          // 한글 입력인데 영문도 같이 치는 케이스(예: "벤치 bench") 대비
           if (qEn && x._en.includes(qEn)) score += 20;
         } else {
-          // ✅ 영문 입력이면 영문 인덱스 우선
           if (qEn && x._en.includes(qEn)) score += 100;
-          // 영문 입력인데 한글도 같이 들어올 수 있음 대비
           if (qKo && x._ko.includes(qKo)) score += 20;
         }
 
@@ -107,7 +153,10 @@ export function useAutoComplete(options?: {
     [results.length]
   );
 
-  const getActiveItem = useCallback(() => results[activeIndex], [results, activeIndex]);
+  const getActiveItem = useCallback(
+    () => results[activeIndex],
+    [results, activeIndex]
+  );
 
   const reset = useCallback(() => {
     setQuery("");
