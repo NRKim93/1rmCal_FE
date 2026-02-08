@@ -40,7 +40,7 @@ export type WeightUnit = "kg" | "lbs";
 export type TrainingSet = {
   id: string;
   previous: string;
-  weight: number;
+  weight: string;
   unit: WeightUnit;
   reps: number;
   restSec: number;

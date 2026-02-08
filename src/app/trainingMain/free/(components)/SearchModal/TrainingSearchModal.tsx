@@ -11,6 +11,13 @@ interface TrainingSearchModalProps {
   onSelectExercise: (exerciseName: string) => void;
 }
 
+// ✅ 허용: 한글(가-힣) + 자모(ㄱ-ㅎ, ㅏ-ㅣ) + 영문 + 공백
+function sanitizeExerciseQuery(v: string) {
+  return v
+    .replace(/[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z\s]/g, "")
+    .replace(/\s+/g, " "); // 연속 공백 1칸으로(원치 않으면 이 줄 제거)
+}
+
 export default function TrainingSearchModal({
   isOpen,
   onClose,
@@ -81,13 +88,12 @@ export default function TrainingSearchModal({
       <input
         id="exerciseName"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => setQuery(sanitizeExerciseQuery(e.target.value))} // ✅ 여기만 바꿈
         onKeyDown={onInputKeyDown}
         placeholder="예) BENCHPRESS"
         className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-500"
       />
 
-      {/* ✅ 검색어가 있을 때만 드롭다운 표시 + 로딩/없음 처리 */}
       {hasQuery && (
         isLoading ? (
           <div className="mt-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500">

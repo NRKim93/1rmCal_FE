@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/common/Header";
 import { Button } from "@/components/common/Button";
 import TrainingExerciseCard from "./(components)/TrainingExerciseCard/TrainingExerciseCard";
 import TrainingSearchModal from "./(components)/SearchModal/TrainingSearchModal";
-import { TrainingExercise, TrainingSet } from "@/lib/types/training";
+import { TrainingExercise, TrainingHistoryItem, TrainingSet, WeightUnit } from "@/lib/types/training";
+import { useTrainingAutoCompleteQuery } from "@/lib/query/training";
+import { getLatestHistory } from "@/services/trainingMain.service";
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
@@ -31,17 +33,106 @@ function makeId(prefix: string) {
   return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 }
 
+function normEn(s: string) {
+  return (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function normKo(s: string) {
+  return (s ?? "").replace(/\s+/g, "").trim().normalize("NFKC");
+}
+
+function hasKorean(s: string) {
+  return /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(s);
+}
+
+function formatPrevious(item?: TrainingHistoryItem) {
+  if (!item) return "-";
+  const weight = item.weight ?? "";
+  const unit = item.weight_unit ?? "";
+  const reps = item.reps ?? "";
+  const weightText = unit ? `${weight} ${unit}` : `${weight}`;
+  if (!weightText && !reps) return "-";
+  if (!reps) return weightText || "-";
+  return `${weightText} x ${reps}`;
+}
+
 export default function FreeTrainingPage() {
   const router = useRouter();
   const [elapsedSeconds] = useState(0);
 
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [exercises, setExercises] = useState<TrainingExercise[]>([]);
+  const [latestHistoryItems, setLatestHistoryItems] = useState<TrainingHistoryItem[]>([]);
+
+  const { data: autoCompleteList = [] } = useTrainingAutoCompleteQuery(true);
+
+  const autoIndex = useMemo(() => {
+    const byEn = new Map<string, { trainingName: string; trainingDisplayName: string }>();
+    const byKo = new Map<string, { trainingName: string; trainingDisplayName: string }>();
+
+    autoCompleteList.forEach((item) => {
+      const enKey = normEn(item.trainingName);
+      const koKey = normKo(item.trainingDisplayName || item.trainingName || "");
+      if (enKey) byEn.set(enKey, item);
+      if (koKey) byKo.set(koKey, item);
+    });
+
+    return { byEn, byKo };
+  }, [autoCompleteList]);
+
+  const latestHistoryMap = useMemo(() => {
+    const map = new Map<string, TrainingHistoryItem[]>();
+
+    latestHistoryItems.forEach((item) => {
+      const enKey = normEn(item.name);
+      const koKey = normKo(item.name);
+      const resolved =
+        autoIndex.byEn.get(enKey)?.trainingName ||
+        autoIndex.byKo.get(koKey)?.trainingName ||
+        (hasKorean(item.name) ? koKey : enKey);
+
+      const list = map.get(resolved) ?? [];
+      list.push(item);
+      map.set(resolved, list);
+    });
+
+    return map;
+  }, [latestHistoryItems, autoIndex]);
+
+  const resolveExerciseKey = (name: string) => {
+    if (hasKorean(name)) {
+      const koKey = normKo(name);
+      return autoIndex.byKo.get(koKey)?.trainingName ?? koKey;
+    }
+
+    const enKey = normEn(name);
+    return autoIndex.byEn.get(enKey)?.trainingName ?? enKey;
+  };
+
+  useEffect(() => {
+    const fetchLatestHistory = async () => {
+      try {
+        const seqStr = localStorage.getItem("seq");
+        if (!seqStr) return;
+        const seq = Number(seqStr);
+        const response = await getLatestHistory(seq);
+        const latestTraining = response?.data?.data?.[0];
+        const trainingHistory = latestTraining?.training_history ?? [];
+        setLatestHistoryItems(trainingHistory);
+      } catch (error) {
+        console.error("latest history fetch failed", error);
+      }
+    };
+
+    fetchLatestHistory();
+  }, []);
 
   const trainingDateLabel = useMemo(() => `${todayYYYYMMDD()} 트레이닝 기록`, []);
 
   const addExercise = (exerciseName: string) => {
     const exerciseId = makeId("ex");
+    const key = resolveExerciseKey(exerciseName);
+    const previousItems = latestHistoryMap.get(key) ?? [];
     setExercises((prev) => {
       const nextIndex = prev.length + 1;
       const newExercise: TrainingExercise = {
@@ -51,8 +142,8 @@ export default function FreeTrainingPage() {
         sets: [
           {
             id: makeId("set"),
-            previous: "-",
-            weight: 0,
+            previous: formatPrevious(previousItems[0]),
+            weight: "0",
             unit: "kg",
             reps: 0,
             restSec: 60,
@@ -69,12 +160,15 @@ export default function FreeTrainingPage() {
       prev.map((exercise) => {
         if (exercise.id !== exerciseId) return exercise;
         const last = exercise.sets[exercise.sets.length - 1];
+        const key = resolveExerciseKey(exercise.name);
+        const previousItems = latestHistoryMap.get(key) ?? [];
+        const nextIndex = exercise.sets.length;
         const newSet: TrainingSet = {
           id: makeId("set"),
-          previous: last ? `${last.weight} ${last.unit} x ${last.reps}` : "-",
-          weight: last?.weight ?? 0,
+          previous: formatPrevious(previousItems[nextIndex]),
+          weight: "0",
           unit: last?.unit ?? "kg",
-          reps: last?.reps ?? 0,
+          reps: 0,
           restSec: last?.restSec ?? 60,
           done: false,
         };
@@ -90,6 +184,55 @@ export default function FreeTrainingPage() {
         return {
           ...exercise,
           sets: exercise.sets.map((set) => (set.id === setId ? { ...set, done: !set.done } : set)),
+        };
+      })
+    );
+  };
+
+  const changeWeight = (exerciseId: string, setId: string, value: string) => {
+    const trimmed = value.trim();
+    if (trimmed !== "" && !/^\d*\.?\d{0,2}$/.test(trimmed)) return;
+    const nextWeight = trimmed === "" ? "0" : trimmed;
+
+    setExercises((prev) =>
+      prev.map((exercise) => {
+        if (exercise.id !== exerciseId) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.map((set) => {
+            if (set.id !== setId) return set;
+            return { ...set, weight: nextWeight };
+          }),
+        };
+      })
+    );
+  };
+
+  const changeUnit = (exerciseId: string, setId: string, unit: WeightUnit) => {
+    setExercises((prev) =>
+      prev.map((exercise) => {
+        if (exercise.id !== exerciseId) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.map((set) => (set.id === setId ? { ...set, unit } : set)),
+        };
+      })
+    );
+  };
+
+  const changeReps = (exerciseId: string, setId: string, value: string) => {
+    const nextReps = value.trim() === "" ? 0 : Number.isNaN(Number(value)) ? null : Number(value);
+
+    setExercises((prev) =>
+      prev.map((exercise) => {
+        if (exercise.id !== exerciseId) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.map((set) => {
+            if (set.id !== setId) return set;
+            if (nextReps === null) return set;
+            return { ...set, reps: nextReps };
+          }),
         };
       })
     );
@@ -128,6 +271,9 @@ export default function FreeTrainingPage() {
               exercise={exercise}
               onAddSet={() => addSet(exercise.id)}
               onToggleDone={(setId) => toggleDone(exercise.id, setId)}
+              onChangeWeight={(setId, value) => changeWeight(exercise.id, setId, value)}
+              onChangeUnit={(setId, unit) => changeUnit(exercise.id, setId, unit)}
+              onChangeReps={(setId, value) => changeReps(exercise.id, setId, value)}
             />
           ))}
         </div>

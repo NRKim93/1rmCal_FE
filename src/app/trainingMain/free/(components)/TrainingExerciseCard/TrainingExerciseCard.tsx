@@ -10,6 +10,9 @@ interface TrainingExerciseCardProps {
   exercise: TrainingExercise;
   onAddSet: () => void;
   onToggleDone: (setId: string) => void;
+  onChangeWeight: (setId: string, value: string) => void;
+  onChangeUnit: (setId: string, unit: TrainingExercise["sets"][number]["unit"]) => void;
+  onChangeReps: (setId: string, value: string) => void;
 }
 
 function displayExerciseName(name: string) {
@@ -39,6 +42,9 @@ export default function TrainingExerciseCard({
   exercise,
   onAddSet,
   onToggleDone,
+  onChangeWeight,
+  onChangeUnit,
+  onChangeReps,
 }: TrainingExerciseCardProps) {
   return (
     <section className="rounded-lg bg-white p-4 shadow-[0_2px_4px_rgba(0,0,0,0.1)]">
@@ -54,7 +60,13 @@ export default function TrainingExerciseCard({
       </div>
 
       <div className="mt-3">
-        <SetTable sets={exercise.sets} onToggleDone={onToggleDone} />
+        <SetTable
+          sets={exercise.sets}
+          onToggleDone={onToggleDone}
+          onChangeWeight={onChangeWeight}
+          onChangeUnit={onChangeUnit}
+          onChangeReps={onChangeReps}
+        />
       </div>
 
       <div className="mt-3">
