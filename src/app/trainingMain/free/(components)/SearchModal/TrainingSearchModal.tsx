@@ -9,6 +9,7 @@ interface TrainingSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectExercise: (exerciseName: string) => void;
+  mode?: "add" | "change";
 }
 
 // ✅ 허용: 한글(가-힣) + 자모(ㄱ-ㅎ, ㅏ-ㅣ) + 영문 + 공백
@@ -22,6 +23,7 @@ export default function TrainingSearchModal({
   isOpen,
   onClose,
   onSelectExercise,
+  mode = "add",
 }: TrainingSearchModalProps) {
   const {
     query,
@@ -80,7 +82,9 @@ export default function TrainingSearchModal({
       }}
       contentClassName="px-5 py-6 text-left w-full"
     >
-      <h2 className="mb-4 text-base font-semibold text-gray-900">종목 추가</h2>
+      <h2 className="mb-4 text-base font-semibold text-gray-900">
+        {mode === "change" ? "종목 변경" : "종목 추가"}
+      </h2>
 
       <label className="block text-xs font-medium text-gray-700" htmlFor="exerciseName">
         종목명
@@ -150,7 +154,7 @@ export default function TrainingSearchModal({
           disabled={!canSubmit}
           onClick={submit}
         >
-          추가
+          {mode === "change" ? "변경" : "추가"}
         </Button>
       </div>
     </Modal>

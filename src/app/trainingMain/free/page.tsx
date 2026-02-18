@@ -47,6 +47,13 @@ function hasKorean(s: string) {
   return /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(s);
 }
 
+function getNameBases(name: string) {
+  const trimmed = (name ?? "").trim();
+  const byHyphen = trimmed.split("-")[0]?.trim() ?? "";
+  const byParen = trimmed.split("(")[0]?.trim() ?? "";
+  return Array.from(new Set([trimmed, byHyphen, byParen].filter(Boolean)));
+}
+
 function formatPrevious(item?: TrainingHistoryItem) {
   if (!item) return "-";
   const weight = item.weight ?? "";
@@ -86,6 +93,8 @@ export default function FreeTrainingPage() {
     reset: resetElapsedTimer,
   } = useTimer({ autoStart: false, direction: "up" });
 
+  const [searchModalMode, setSearchModalMode] = useState<"add" | "change">("add");
+  const [searchTargetExerciseId, setSearchTargetExerciseId] = useState<string | null>(null);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [restPickerExerciseId, setRestPickerExerciseId] = useState<string | null>(null);
   const [exercises, setExercises] = useState<TrainingExercise[]>([]);
@@ -118,9 +127,22 @@ export default function FreeTrainingPage() {
         autoIndex.byKo.get(koKey)?.trainingName ||
         (hasKorean(item.name) ? koKey : enKey);
 
-      const list = map.get(resolved) ?? [];
-      list.push(item);
-      map.set(resolved, list);
+      const baseNames = getNameBases(item.name);
+      const aliasKeys = Array.from(
+        new Set([
+          resolved,
+          enKey,
+          koKey,
+          ...baseNames.map((base) => normEn(base)),
+          ...baseNames.map((base) => normKo(base)),
+        ].filter(Boolean))
+      );
+
+      aliasKeys.forEach((key) => {
+        const list = map.get(key) ?? [];
+        list.push(item);
+        map.set(key, list);
+      });
     });
 
     return map;
@@ -135,6 +157,52 @@ export default function FreeTrainingPage() {
     const enKey = normEn(name);
     return autoIndex.byEn.get(enKey)?.trainingName ?? enKey;
   };
+
+  const getPreviousItemsForExercise = (exerciseName: string) => {
+    const resolved = resolveExerciseKey(exerciseName);
+    const baseNames = getNameBases(exerciseName);
+    const candidates = Array.from(
+      new Set([
+        resolved,
+        normEn(exerciseName),
+        normKo(exerciseName),
+        ...baseNames.map((base) => normEn(base)),
+        ...baseNames.map((base) => normKo(base)),
+      ].filter(Boolean))
+    );
+
+    for (const key of candidates) {
+      const found = latestHistoryMap.get(key);
+      if (found && found.length > 0) return found;
+    }
+    return [];
+  };
+
+  useEffect(() => {
+    if (exercises.length === 0) return;
+
+    setExercises((prev) => {
+      let changed = false;
+
+      const next = prev.map((exercise) => {
+        const previousItems = getPreviousItemsForExercise(exercise.name);
+        let exerciseChanged = false;
+
+        const sets = exercise.sets.map((set, idx) => {
+          const nextPrevious = formatPrevious(previousItems[idx]);
+          if (set.previous === nextPrevious) return set;
+          exerciseChanged = true;
+          return { ...set, previous: nextPrevious };
+        });
+
+        if (!exerciseChanged) return exercise;
+        changed = true;
+        return { ...exercise, sets };
+      });
+
+      return changed ? next : prev;
+    });
+  }, [latestHistoryMap]); // history 로딩 이후에도 기존 세트 Previous를 동기화
 
   useEffect(() => {
     const fetchLatestHistory = async () => {
@@ -158,8 +226,7 @@ export default function FreeTrainingPage() {
 
   const addExercise = (exerciseName: string) => {
     const exerciseId = makeId("ex");
-    const key = resolveExerciseKey(exerciseName);
-    const previousItems = latestHistoryMap.get(key) ?? [];
+    const previousItems = getPreviousItemsForExercise(exerciseName);
     setExercises((prev) => {
       const nextIndex = prev.length + 1;
       const newExercise: TrainingExercise = {
@@ -187,8 +254,7 @@ export default function FreeTrainingPage() {
       prev.map((exercise) => {
         if (exercise.id !== exerciseId) return exercise;
         const last = exercise.sets[exercise.sets.length - 1];
-        const key = resolveExerciseKey(exercise.name);
-        const previousItems = latestHistoryMap.get(key) ?? [];
+        const previousItems = getPreviousItemsForExercise(exercise.name);
         const nextIndex = exercise.sets.length;
         const newSet: TrainingSet = {
           id: makeId("set"),
@@ -196,7 +262,7 @@ export default function FreeTrainingPage() {
           weight: "0",
           unit: last?.unit ?? "kg",
           reps: 0,
-          restSec: last?.restSec ?? 60,
+          restSec: last?.restSec ?? 0,
           done: false,
         };
         return { ...exercise, sets: [...exercise.sets, newSet] };
@@ -236,6 +302,12 @@ export default function FreeTrainingPage() {
 
   const setExerciseRest = (exerciseId: string) => {
     setRestPickerExerciseId(exerciseId);
+  };
+
+  const openChangeExerciseModal = (exerciseId: string) => {
+    setSearchModalMode("change");
+    setSearchTargetExerciseId(exerciseId);
+    setIsSearchModalOpen(true);
   };
 
   const duplicateExercise = (exerciseId: string) => {
@@ -296,7 +368,7 @@ export default function FreeTrainingPage() {
     () => exercises.find((exercise) => exercise.id === restPickerExerciseId) ?? null,
     [exercises, restPickerExerciseId]
   );
-  const selectedRestSeconds = selectedRestExercise?.sets[0]?.restSec ?? 60;
+  const selectedRestSeconds = selectedRestExercise?.sets[0]?.restSec ?? 0;
 
   const changeWeight = (exerciseId: string, setId: string, value: string) => {
     const trimmed = value.trim();
@@ -404,6 +476,7 @@ export default function FreeTrainingPage() {
               onAddSet={() => addSet(exercise.id)}
               onRemoveExercise={() => removeExercise(exercise.id)}
               onSetRestTime={() => setExerciseRest(exercise.id)}
+              onChangeExercise={() => openChangeExerciseModal(exercise.id)}
               onDuplicateExercise={() => duplicateExercise(exercise.id)}
               onMoveExercise={() => moveExercise(exercise.id)}
               onToggleDone={(setId) => toggleDone(exercise.id, setId)}
@@ -420,7 +493,11 @@ export default function FreeTrainingPage() {
             size="md"
             fullWidth
             className="border-0 bg-sky-100 text-base font-semibold text-sky-950 enabled:hover:bg-sky-200"
-            onClick={() => setIsSearchModalOpen(true)}
+            onClick={() => {
+              setSearchModalMode("add");
+              setSearchTargetExerciseId(null);
+              setIsSearchModalOpen(true);
+            }}
           >
             + 트레이닝 종목 추가
           </Button>
@@ -440,10 +517,35 @@ export default function FreeTrainingPage() {
 
       <TrainingSearchModal
         isOpen={isSearchModalOpen}
-        onClose={() => setIsSearchModalOpen(false)}
-        onSelectExercise={(exerciseName) => {
-          addExercise(exerciseName);
+        mode={searchModalMode}
+        onClose={() => {
           setIsSearchModalOpen(false);
+          setSearchModalMode("add");
+          setSearchTargetExerciseId(null);
+        }}
+        onSelectExercise={(exerciseName) => {
+          if (searchModalMode === "change" && searchTargetExerciseId) {
+            const previousItems = getPreviousItemsForExercise(exerciseName);
+            setExercises((prev) =>
+              prev.map((exercise) =>
+                exercise.id === searchTargetExerciseId
+                  ? {
+                      ...exercise,
+                      name: exerciseName,
+                      sets: exercise.sets.map((set, idx) => ({
+                        ...set,
+                        previous: formatPrevious(previousItems[idx]),
+                      })),
+                    }
+                  : exercise
+              )
+            );
+          } else {
+            addExercise(exerciseName);
+          }
+          setIsSearchModalOpen(false);
+          setSearchModalMode("add");
+          setSearchTargetExerciseId(null);
         }}
       />
       <RestTimePickerModal

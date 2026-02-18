@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React from "react";
 import { Button } from "@/components/common/Button";
@@ -12,6 +12,7 @@ interface TrainingExerciseCardProps {
   onAddSet: () => void;
   onRemoveExercise: () => void;
   onSetRestTime: () => void;
+  onChangeExercise: () => void;
   onDuplicateExercise: () => void;
   onMoveExercise: () => void;
   onToggleDone: (setId: string) => void;
@@ -26,6 +27,7 @@ export default function TrainingExerciseCard({
   onAddSet,
   onRemoveExercise,
   onSetRestTime,
+  onChangeExercise,
   onDuplicateExercise,
   onMoveExercise,
   onToggleDone,
@@ -45,6 +47,7 @@ export default function TrainingExerciseCard({
           items={[
             { label: "휴식시간 설정", onClick: onSetRestTime },
             { label: "종목 복사", onClick: onDuplicateExercise },
+            { label: "종목 변경", onClick: onChangeExercise },
             { label: "종목 이동", onClick: onMoveExercise },
             { label: "종목 삭제", danger: true, onClick: onRemoveExercise },
           ]}
