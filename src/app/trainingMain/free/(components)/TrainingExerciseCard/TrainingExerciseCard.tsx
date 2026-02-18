@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/common/Button";
+import { MeatballMenu } from "@/components/common/MeatballMenu";
 import { TrainingExercise } from "@/lib/types/training";
 import SetTable from "../SetTable/SetTable";
 
@@ -10,19 +11,13 @@ interface TrainingExerciseCardProps {
   exercise: TrainingExercise;
   onAddSet: () => void;
   onRemoveExercise: () => void;
+  onSetRestTime: () => void;
+  onDuplicateExercise: () => void;
+  onMoveExercise: () => void;
   onToggleDone: (setId: string) => void;
   onChangeWeight: (setId: string, value: string) => void;
   onChangeUnit: (setId: string, unit: TrainingExercise["sets"][number]["unit"]) => void;
   onChangeReps: (setId: string, value: string) => void;
-}
-
-function displayExerciseName(name: string) {
-  const parts = name.split("-");
-  if (parts.length < 2) return name;
-
-  const suffix = parts[parts.length - 1]?.trim().toUpperCase();
-
-  return parts.slice(0, -1).join("-");
 }
 
 export default function TrainingExerciseCard({
@@ -30,6 +25,9 @@ export default function TrainingExerciseCard({
   exercise,
   onAddSet,
   onRemoveExercise,
+  onSetRestTime,
+  onDuplicateExercise,
+  onMoveExercise,
   onToggleDone,
   onChangeWeight,
   onChangeUnit,
@@ -40,23 +38,17 @@ export default function TrainingExerciseCard({
       <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
         <div className="min-w-0">
           <div className="min-w-0 truncate text-lg font-bold text-gray-900">
-            {index}. {displayExerciseName(exercise.name)}
+            {index}. {exercise.name}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
-            <span className="whitespace-nowrap">휴식 시간 : {exercise.restLabel}</span>
-          </div>
-          <button
-            type="button"
-            onClick={onRemoveExercise}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-white text-sm font-bold text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600"
-            aria-label="Remove exercise"
-            title="Remove exercise"
-          >
-            x
-          </button>
-        </div>
+        <MeatballMenu
+          items={[
+            { label: "휴식시간 설정", onClick: onSetRestTime },
+            { label: "종목 복사", onClick: onDuplicateExercise },
+            { label: "종목 이동", onClick: onMoveExercise },
+            { label: "종목 삭제", danger: true, onClick: onRemoveExercise },
+          ]}
+        />
       </div>
 
       <div className="mt-4">
@@ -66,6 +58,7 @@ export default function TrainingExerciseCard({
           onChangeWeight={onChangeWeight}
           onChangeUnit={onChangeUnit}
           onChangeReps={onChangeReps}
+          restLabel={exercise.restLabel}
         />
       </div>
 

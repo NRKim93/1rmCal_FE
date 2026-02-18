@@ -5,6 +5,7 @@ import { TrainingSet } from "@/lib/types/training";
 
 interface SetTableProps {
   sets: TrainingSet[];
+  restLabel: string;
   onToggleDone: (setId: string) => void;
   onChangeWeight: (setId: string, value: string) => void;
   onChangeUnit: (setId: string, unit: TrainingSet["unit"]) => void;
@@ -12,10 +13,11 @@ interface SetTableProps {
 }
 
 const GRID_COLS =
-  "grid-cols-[minmax(2.25rem,0.55fr)_minmax(0,1.8fr)_minmax(9rem,1.2fr)_minmax(4.25rem,0.9fr)_minmax(2.5rem,0.55fr)]";
+  "grid-cols-[minmax(2.25rem,0.55fr)_minmax(0,1.8fr)_minmax(9rem,1.2fr)_minmax(4.25rem,0.8fr)_minmax(6.5rem,1fr)_minmax(2.5rem,0.5fr)]";
 
 export default function SetTable({
   sets,
+  restLabel,
   onToggleDone,
   onChangeWeight,
   onChangeUnit,
@@ -34,6 +36,7 @@ export default function SetTable({
         <div className="min-w-0">Previous</div>
         <div className="min-w-0 text-center">KG/LBS</div>
         <div className="min-w-0 text-center">Reps</div>
+        <div className="min-w-0 text-center">휴식 시간</div>
         <div className="min-w-0 text-center" aria-label="Done" />
       </div>
 
@@ -94,6 +97,10 @@ export default function SetTable({
                 className="mx-auto h-8 w-14 rounded-md border border-gray-400 bg-white px-2 text-center text-sm tabular-nums text-gray-900"
                 aria-label="Reps"
               />
+            </div>
+
+            <div className="min-w-0 text-center text-xs font-medium text-gray-700">
+              <span className="inline-block rounded-md bg-gray-100 px-2 py-1 whitespace-nowrap">{restLabel}</span>
             </div>
 
             <button

@@ -6,6 +6,7 @@ import { Header } from "@/components/common/Header";
 import { Button } from "@/components/common/Button";
 import TrainingExerciseCard from "./(components)/TrainingExerciseCard/TrainingExerciseCard";
 import TrainingSearchModal from "./(components)/SearchModal/TrainingSearchModal";
+import RestTimePickerModal from "./(components)/RestTimePickerModal/RestTimePickerModal";
 import { TrainingExercise, TrainingHistoryItem, TrainingSet, WeightUnit } from "@/lib/types/training";
 import { useTrainingAutoCompleteQuery } from "@/lib/query/training";
 import { getLatestHistory } from "@/services/trainingMain.service";
@@ -68,6 +69,13 @@ function normalizeWeightInput(raw: string) {
   return `${normalizedInt}.${decimalPart}`;
 }
 
+function formatMMSS(totalSec: number) {
+  const sec = Math.max(0, Math.floor(totalSec));
+  const mm = pad2(Math.floor(sec / 60));
+  const ss = pad2(sec % 60);
+  return `${mm}:${ss}`;
+}
+
 export default function FreeTrainingPage() {
   const router = useRouter();
   const {
@@ -79,6 +87,7 @@ export default function FreeTrainingPage() {
   } = useTimer({ autoStart: false, direction: "up" });
 
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [restPickerExerciseId, setRestPickerExerciseId] = useState<string | null>(null);
   const [exercises, setExercises] = useState<TrainingExercise[]>([]);
   const [latestHistoryItems, setLatestHistoryItems] = useState<TrainingHistoryItem[]>([]);
 
@@ -156,7 +165,7 @@ export default function FreeTrainingPage() {
       const newExercise: TrainingExercise = {
         id: exerciseId,
         name: exerciseName || `종목 ${nextIndex}`,
-        restLabel: "MM:SS",
+        restLabel: "00:00",
         sets: [
           {
             id: makeId("set"),
@@ -164,7 +173,7 @@ export default function FreeTrainingPage() {
             weight: "0",
             unit: "kg",
             reps: 0,
-            restSec: 60,
+            restSec: 0,
             done: false,
           },
         ],
@@ -210,6 +219,84 @@ export default function FreeTrainingPage() {
   const removeExercise = (exerciseId: string) => {
     setExercises((prev) => prev.filter((exercise) => exercise.id !== exerciseId));
   };
+
+  const applyExerciseRest = (exerciseId: string, nextSec: number) => {
+    const restLabel = formatMMSS(nextSec);
+    setExercises((prev) =>
+      prev.map((item) => {
+        if (item.id !== exerciseId) return item;
+        return {
+          ...item,
+          restLabel,
+          sets: item.sets.map((set) => ({ ...set, restSec: nextSec })),
+        };
+      })
+    );
+  };
+
+  const setExerciseRest = (exerciseId: string) => {
+    setRestPickerExerciseId(exerciseId);
+  };
+
+  const duplicateExercise = (exerciseId: string) => {
+    setExercises((prev) => {
+      const sourceIndex = prev.findIndex((exercise) => exercise.id === exerciseId);
+      if (sourceIndex < 0) return prev;
+
+      const source = prev[sourceIndex];
+      const cloned: TrainingExercise = {
+        ...source,
+        id: makeId("ex"),
+        name: `${source.name} (복사)`,
+        sets: source.sets.map((set) => ({
+          ...set,
+          id: makeId("set"),
+          done: false,
+        })),
+      };
+
+      const next = [...prev];
+      next.splice(sourceIndex + 1, 0, cloned);
+      return next;
+    });
+  };
+
+  const moveExercise = (exerciseId: string) => {
+    const currentIndex = exercises.findIndex((exercise) => exercise.id === exerciseId);
+    if (currentIndex < 0) return;
+
+    const input = window.prompt(
+      `이동할 위치를 입력하세요. (1-${exercises.length})`,
+      String(currentIndex + 1)
+    );
+    if (input == null) return;
+
+    const targetIndex = Number(input.trim()) - 1;
+    if (
+      Number.isNaN(targetIndex) ||
+      targetIndex < 0 ||
+      targetIndex >= exercises.length ||
+      targetIndex === currentIndex
+    ) {
+      return;
+    }
+
+    setExercises((prev) => {
+      const from = prev.findIndex((exercise) => exercise.id === exerciseId);
+      if (from < 0) return prev;
+
+      const next = [...prev];
+      const [picked] = next.splice(from, 1);
+      next.splice(targetIndex, 0, picked);
+      return next;
+    });
+  };
+
+  const selectedRestExercise = useMemo(
+    () => exercises.find((exercise) => exercise.id === restPickerExerciseId) ?? null,
+    [exercises, restPickerExerciseId]
+  );
+  const selectedRestSeconds = selectedRestExercise?.sets[0]?.restSec ?? 60;
 
   const changeWeight = (exerciseId: string, setId: string, value: string) => {
     const trimmed = value.trim();
@@ -316,6 +403,9 @@ export default function FreeTrainingPage() {
               exercise={exercise}
               onAddSet={() => addSet(exercise.id)}
               onRemoveExercise={() => removeExercise(exercise.id)}
+              onSetRestTime={() => setExerciseRest(exercise.id)}
+              onDuplicateExercise={() => duplicateExercise(exercise.id)}
+              onMoveExercise={() => moveExercise(exercise.id)}
               onToggleDone={(setId) => toggleDone(exercise.id, setId)}
               onChangeWeight={(setId, value) => changeWeight(exercise.id, setId, value)}
               onChangeUnit={(setId, unit) => changeUnit(exercise.id, setId, unit)}
@@ -354,6 +444,16 @@ export default function FreeTrainingPage() {
         onSelectExercise={(exerciseName) => {
           addExercise(exerciseName);
           setIsSearchModalOpen(false);
+        }}
+      />
+      <RestTimePickerModal
+        isOpen={restPickerExerciseId !== null}
+        initialSeconds={selectedRestSeconds}
+        onClose={() => setRestPickerExerciseId(null)}
+        onConfirm={(seconds) => {
+          if (!restPickerExerciseId) return;
+          applyExerciseRest(restPickerExerciseId, seconds);
+          setRestPickerExerciseId(null);
         }}
       />
     </div>
