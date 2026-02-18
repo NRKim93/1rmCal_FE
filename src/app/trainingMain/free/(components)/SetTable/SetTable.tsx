@@ -12,7 +12,7 @@ interface SetTableProps {
 }
 
 const GRID_COLS =
-  "grid-cols-[minmax(2.25rem,0.6fr)_minmax(0,1.7fr)_minmax(7.5rem,1fr)_minmax(3.25rem,1fr)_minmax(2.25rem,0.6fr)]";
+  "grid-cols-[minmax(2.25rem,0.55fr)_minmax(0,1.8fr)_minmax(9rem,1.2fr)_minmax(4.25rem,0.9fr)_minmax(2.5rem,0.55fr)]";
 
 export default function SetTable({
   sets,
@@ -22,12 +22,11 @@ export default function SetTable({
   onChangeReps,
 }: SetTableProps) {
   return (
-    <div className="w-full rounded-lg bg-gray-200 p-3">
-      {/* Header */}
+    <div className="w-full rounded-xl bg-gray-200 p-3.5">
       <div
         className={[
-          "grid w-full items-center gap-2 rounded-md bg-gray-600 px-4 py-2",
-          "text-[11px] font-semibold text-white",
+          "grid w-full items-center gap-2 rounded-lg bg-gray-600 px-4 py-2.5",
+          "text-xs font-semibold text-white",
           GRID_COLS,
         ].join(" ")}
       >
@@ -38,32 +37,32 @@ export default function SetTable({
         <div className="min-w-0 text-center" aria-label="Done" />
       </div>
 
-      {/* Body */}
-      <div className="mt-2 overflow-hidden rounded-md bg-white">
+      <div className="mt-2 overflow-hidden rounded-lg bg-white">
         {sets.map((set, setIdx) => (
           <div
             key={set.id}
             className={[
-              "grid w-full items-center gap-2 px-4 py-2",
-              "text-[11px] text-gray-800",
+              "grid w-full items-center gap-2 px-4 py-2.5 transition-colors",
+              "text-xs text-gray-800",
               "border-b border-gray-200 last:border-b-0",
+              set.done ? "bg-emerald-50 border-emerald-100 text-emerald-900" : "",
               GRID_COLS,
             ].join(" ")}
           >
-            {/* Set */}
-            <div className="min-w-0 tabular-nums">{setIdx + 1}</div>
+            <div className={["min-w-0 tabular-nums", set.done ? "font-semibold" : ""].join(" ")}>
+              {setIdx + 1}
+            </div>
 
-            {/* Previous */}
             <div
               className={[
                 "min-w-0 truncate",
+                set.done ? "font-medium" : "",
                 !set.previous || set.previous === "-" ? "text-center" : "",
               ].join(" ")}
             >
               {set.previous || "-"}
             </div>
 
-            {/* KG/LBS (Weight + Unit) */}
             <div className="min-w-0">
               <div className="mx-auto flex w-fit items-center justify-center gap-1">
                 <input
@@ -71,13 +70,13 @@ export default function SetTable({
                   inputMode="decimal"
                   value={set.weight}
                   onChange={(event) => onChangeWeight(set.id, event.target.value)}
-                  className="h-5 w-14 rounded border border-gray-400 bg-white px-1 text-center text-[11px] tabular-nums text-gray-900"
+                  className="h-8 w-16 rounded-md border border-gray-400 bg-white px-2 text-center text-sm tabular-nums text-gray-900"
                   aria-label="Weight"
                 />
                 <select
                   value={set.unit}
                   onChange={(event) => onChangeUnit(set.id, event.target.value as TrainingSet["unit"])}
-                  className="h-5 w-12 rounded border border-gray-400 bg-white px-1 text-[10px] font-semibold text-gray-700"
+                  className="h-8 w-14 rounded-md border border-gray-400 bg-white px-1.5 text-xs font-semibold text-gray-700"
                   aria-label="Unit"
                 >
                   <option value="kg">KG</option>
@@ -86,31 +85,27 @@ export default function SetTable({
               </div>
             </div>
 
-            {/* Reps */}
             <div className="min-w-0 text-center tabular-nums">
               <input
                 type="text"
                 inputMode="numeric"
                 value={String(set.reps)}
                 onChange={(event) => onChangeReps(set.id, event.target.value)}
-                className="mx-auto h-5 w-12 rounded border border-gray-400 bg-white px-1 text-center text-[11px] tabular-nums text-gray-900"
+                className="mx-auto h-8 w-14 rounded-md border border-gray-400 bg-white px-2 text-center text-sm tabular-nums text-gray-900"
                 aria-label="Reps"
               />
             </div>
 
-            {/* Done */}
             <button
               type="button"
               onClick={() => onToggleDone(set.id)}
               className={[
-                "mx-auto flex h-5 w-5 items-center justify-center rounded-full border",
-                set.done ? "border-gray-900 bg-gray-900" : "border-gray-500 bg-transparent",
+                "mx-auto flex h-7 w-7 items-center justify-center rounded-full border-2 transition-colors",
+                set.done ? "border-emerald-700 bg-emerald-700" : "border-gray-400 bg-transparent",
               ].join(" ")}
               aria-label={set.done ? "Done" : "Not done"}
             >
-              <span className={set.done ? "text-[10px] text-white" : "text-transparent"}>
-                ✓
-              </span>
+              {set.done ? <span className="h-2.5 w-2.5 rounded-full bg-white" aria-hidden /> : null}
             </button>
           </div>
         ))}
