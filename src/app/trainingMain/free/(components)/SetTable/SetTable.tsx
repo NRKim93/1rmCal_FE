@@ -5,7 +5,6 @@ import { TrainingSet } from "@/lib/types/training";
 
 interface SetTableProps {
   sets: TrainingSet[];
-  restLabel: string;
   onToggleDone: (setId: string) => void;
   onChangeWeight: (setId: string, value: string) => void;
   onChangeUnit: (setId: string, unit: TrainingSet["unit"]) => void;
@@ -17,12 +16,18 @@ const GRID_COLS =
 
 export default function SetTable({
   sets,
-  restLabel,
   onToggleDone,
   onChangeWeight,
   onChangeUnit,
   onChangeReps,
 }: SetTableProps) {
+  const formatMMSS = (totalSec: number) => {
+    const sec = Math.max(0, Math.floor(totalSec));
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    return `${mm}:${ss}`;
+  };
+
   return (
     <div className="w-full rounded-xl bg-gray-200 p-3.5">
       <div
@@ -100,8 +105,8 @@ export default function SetTable({
             </div>
 
             <div className="min-w-0 text-center text-xs font-medium text-gray-700">
-              <span className="inline-block min-w-[3.1rem] rounded-md bg-gray-100 px-1.5 py-1 whitespace-nowrap">
-                {restLabel}
+              <span className="inline-block min-w-[3.1rem] rounded-md px-1.5 py-1 whitespace-nowrap">
+                {formatMMSS(set.restSec)}
               </span>
             </div>
 

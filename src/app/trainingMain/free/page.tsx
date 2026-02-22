@@ -44,7 +44,7 @@ function normKo(s: string) {
 }
 
 function hasKorean(s: string) {
-  return /[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(s);
+  return /[\u3131-\u318E\uAC00-\uD7A3]/.test(s);
 }
 
 function getNameBases(name: string) {
@@ -83,6 +83,12 @@ function formatMMSS(totalSec: number) {
   return `${mm}:${ss}`;
 }
 
+type RestPickerTarget =
+  | { type: "exercise"; exerciseId: string }
+  | { type: "latestSet"; exerciseId: string; setId: string };
+
+type LatestSetTarget = { exerciseId: string; setId: string; restSec: number; createdAt: number };
+
 export default function FreeTrainingPage() {
   const router = useRouter();
   const {
@@ -96,7 +102,7 @@ export default function FreeTrainingPage() {
   const [searchModalMode, setSearchModalMode] = useState<"add" | "change">("add");
   const [searchTargetExerciseId, setSearchTargetExerciseId] = useState<string | null>(null);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-  const [restPickerExerciseId, setRestPickerExerciseId] = useState<string | null>(null);
+  const [restPickerTarget, setRestPickerTarget] = useState<RestPickerTarget | null>(null);
   const [exercises, setExercises] = useState<TrainingExercise[]>([]);
   const [latestHistoryItems, setLatestHistoryItems] = useState<TrainingHistoryItem[]>([]);
 
@@ -202,7 +208,7 @@ export default function FreeTrainingPage() {
 
       return changed ? next : prev;
     });
-  }, [latestHistoryMap]); // history 로딩 이후에도 기존 세트 Previous를 동기화
+  }, [latestHistoryMap]); // Sync previous values after history is loaded
 
   useEffect(() => {
     const fetchLatestHistory = async () => {
@@ -262,7 +268,7 @@ export default function FreeTrainingPage() {
           weight: "0",
           unit: last?.unit ?? "kg",
           reps: 0,
-          restSec: last?.restSec ?? 0,
+          restSec: 0,
           done: false,
         };
         return { ...exercise, sets: [...exercise.sets, newSet] };
@@ -300,8 +306,22 @@ export default function FreeTrainingPage() {
     );
   };
 
+  const applyLatestSetRest = (exerciseId: string, setId: string, nextSec: number) => {
+    const restLabel = formatMMSS(nextSec);
+    setExercises((prev) =>
+      prev.map((item) => {
+        if (item.id !== exerciseId) return item;
+        return {
+          ...item,
+          restLabel,
+          sets: item.sets.map((set) => (set.id === setId ? { ...set, restSec: nextSec } : set)),
+        };
+      })
+    );
+  };
+
   const setExerciseRest = (exerciseId: string) => {
-    setRestPickerExerciseId(exerciseId);
+    setRestPickerTarget({ type: "exercise", exerciseId });
   };
 
   const openChangeExerciseModal = (exerciseId: string) => {
@@ -364,11 +384,39 @@ export default function FreeTrainingPage() {
     });
   };
 
-  const selectedRestExercise = useMemo(
-    () => exercises.find((exercise) => exercise.id === restPickerExerciseId) ?? null,
-    [exercises, restPickerExerciseId]
-  );
-  const selectedRestSeconds = selectedRestExercise?.sets[0]?.restSec ?? 0;
+  const getCreatedAtFromId = (id: string) => {
+    const createdAtRaw = id.split("_").at(-1);
+    const createdAt = Number(createdAtRaw);
+    return Number.isFinite(createdAt) ? createdAt : 0;
+  };
+
+  const latestSetTarget = useMemo<LatestSetTarget | null>(() => {
+    let latest: LatestSetTarget | null = null;
+
+    exercises.forEach((exercise) => {
+      exercise.sets.forEach((set) => {
+        const createdAt = getCreatedAtFromId(set.id);
+        if (!latest || createdAt > latest.createdAt) {
+          latest = { exerciseId: exercise.id, setId: set.id, restSec: set.restSec, createdAt };
+        }
+      });
+    });
+
+    return latest;
+  }, [exercises]);
+
+  const selectedRestSeconds = useMemo(() => {
+    if (!restPickerTarget) return 0;
+
+    if (restPickerTarget.type === "exercise") {
+      const selectedExercise = exercises.find((exercise) => exercise.id === restPickerTarget.exerciseId);
+      return selectedExercise?.sets[0]?.restSec ?? 0;
+    }
+
+    const selectedExercise = exercises.find((exercise) => exercise.id === restPickerTarget.exerciseId);
+    const selectedSet = selectedExercise?.sets.find((set) => set.id === restPickerTarget.setId);
+    return selectedSet?.restSec ?? 0;
+  }, [exercises, restPickerTarget]);
 
   const changeWeight = (exerciseId: string, setId: string, value: string) => {
     const trimmed = value.trim();
@@ -506,7 +554,21 @@ export default function FreeTrainingPage() {
 
       <footer className="fixed inset-x-0 bottom-0 border-t border-gray-200 bg-white/95 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[560px] gap-3 px-5">
-          <Button variant="outline" size="md" fullWidth className="border-0 bg-gray-300 font-semibold text-black enabled:hover:bg-gray-400">
+          <Button
+            variant="outline"
+            size="md"
+            fullWidth
+            className="border-0 bg-gray-300 font-semibold text-black enabled:hover:bg-gray-400"
+            disabled={!latestSetTarget}
+            onClick={() => {
+              if (!latestSetTarget) return;
+              setRestPickerTarget({
+                type: "latestSet",
+                exerciseId: latestSetTarget.exerciseId,
+                setId: latestSetTarget.setId,
+              });
+            }}
+          >
             휴식 타이머
           </Button>
           <Button variant="danger" size="md" fullWidth className="font-semibold">
@@ -549,13 +611,17 @@ export default function FreeTrainingPage() {
         }}
       />
       <RestTimePickerModal
-        isOpen={restPickerExerciseId !== null}
+        isOpen={restPickerTarget !== null}
         initialSeconds={selectedRestSeconds}
-        onClose={() => setRestPickerExerciseId(null)}
+        onClose={() => setRestPickerTarget(null)}
         onConfirm={(seconds) => {
-          if (!restPickerExerciseId) return;
-          applyExerciseRest(restPickerExerciseId, seconds);
-          setRestPickerExerciseId(null);
+          if (!restPickerTarget) return;
+          if (restPickerTarget.type === "exercise") {
+            applyExerciseRest(restPickerTarget.exerciseId, seconds);
+          } else {
+            applyLatestSetRest(restPickerTarget.exerciseId, restPickerTarget.setId, seconds);
+          }
+          setRestPickerTarget(null);
         }}
       />
     </div>

@@ -61,7 +61,6 @@ export default function TrainingExerciseCard({
           onChangeWeight={onChangeWeight}
           onChangeUnit={onChangeUnit}
           onChangeReps={onChangeReps}
-          restLabel={exercise.restLabel}
         />
       </div>
 

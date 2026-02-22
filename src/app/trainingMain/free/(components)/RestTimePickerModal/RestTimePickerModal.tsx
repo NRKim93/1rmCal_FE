@@ -14,12 +14,11 @@ interface RestTimePickerModalProps {
 const ITEM_HEIGHT = 36;
 const PAD_Y = 70;
 
-function toHMS(totalSeconds: number) {
+function toMS(totalSeconds: number) {
   const sec = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(sec / 3600);
-  const minutes = Math.floor((sec % 3600) / 60);
+  const minutes = Math.floor(sec / 60);
   const seconds = sec % 60;
-  return { hours, minutes, seconds };
+  return { minutes, seconds };
 }
 
 function TimeWheelColumn({
@@ -52,43 +51,44 @@ function TimeWheelColumn({
   }, []);
 
   return (
-    <div className="relative w-full">
-      <div
-        ref={containerRef}
-        className="h-44 overflow-y-auto rounded-xl bg-[#f3f4f6] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        onScroll={(event) => {
-          if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-          const target = event.currentTarget;
-          rafRef.current = requestAnimationFrame(() => {
-            const next = Math.round(target.scrollTop / ITEM_HEIGHT);
-            const clamped = Math.min(max, Math.max(0, next));
-            if (clamped !== value) onChange(clamped);
-          });
-        }}
-      >
-        <div style={{ paddingTop: PAD_Y, paddingBottom: PAD_Y }}>
-          {options.map((n) => (
-            <button
-              key={`${unit}-${n}`}
-              type="button"
-              className={[
-                "block h-9 w-full text-center text-2xl tabular-nums transition-colors",
-                n === value ? "font-semibold text-gray-900" : "text-gray-500",
-              ].join(" ")}
-              onClick={() => {
-                onChange(n);
-                if (containerRef.current) {
-                  containerRef.current.scrollTo({ top: n * ITEM_HEIGHT, behavior: "smooth" });
-                }
-              }}
-            >
-              {n}
-            </button>
-          ))}
+    <div className="w-full">
+      <div className="mb-2 text-center text-sm font-medium text-gray-600">{unit}</div>
+      <div className="relative">
+        <div
+          ref={containerRef}
+          className="h-44 overflow-y-auto rounded-xl bg-[#f3f4f6] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          onScroll={(event) => {
+            if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+            const target = event.currentTarget;
+            rafRef.current = requestAnimationFrame(() => {
+              const next = Math.round(target.scrollTop / ITEM_HEIGHT);
+              const clamped = Math.min(max, Math.max(0, next));
+              if (clamped !== value) onChange(clamped);
+            });
+          }}
+        >
+          <div style={{ paddingTop: PAD_Y, paddingBottom: PAD_Y }}>
+            {options.map((n) => (
+              <button
+                key={`${unit}-${n}`}
+                type="button"
+                className={[
+                  "block h-9 w-full text-center text-2xl tabular-nums transition-colors",
+                  n === value ? "font-semibold text-gray-900" : "text-gray-500",
+                ].join(" ")}
+                onClick={() => {
+                  onChange(n);
+                  if (containerRef.current) {
+                    containerRef.current.scrollTo({ top: n * ITEM_HEIGHT, behavior: "smooth" });
+                  }
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="pointer-events-none absolute inset-x-2 top-1/2 -translate-y-1/2 rounded-lg bg-white/90 py-1 text-center text-sm font-medium text-gray-700 shadow-sm">
-        {unit}
+        <div className="pointer-events-none absolute inset-x-2 top-1/2 h-9 -translate-y-1/2 rounded-lg border border-gray-300" />
       </div>
     </div>
   );
@@ -100,19 +100,17 @@ export default function RestTimePickerModal({
   onClose,
   onConfirm,
 }: RestTimePickerModalProps) {
-  const initial = useMemo(() => toHMS(initialSeconds), [initialSeconds]);
-  const [hours, setHours] = useState(initial.hours);
+  const initial = useMemo(() => toMS(initialSeconds), [initialSeconds]);
   const [minutes, setMinutes] = useState(initial.minutes);
   const [seconds, setSeconds] = useState(initial.seconds);
 
   useEffect(() => {
     if (!isOpen) return;
-    setHours(initial.hours);
     setMinutes(initial.minutes);
     setSeconds(initial.seconds);
-  }, [isOpen, initial.hours, initial.minutes, initial.seconds]);
+  }, [isOpen, initial.minutes, initial.seconds]);
 
-  const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+  const totalSeconds = minutes * 60 + seconds;
 
   return (
     <Modal
@@ -125,8 +123,7 @@ export default function RestTimePickerModal({
     >
       <div className="mx-auto w-full">
         <h2 className="mb-3 text-lg font-semibold text-gray-900">휴식시간 설정</h2>
-        <div className="grid grid-cols-3 gap-2">
-          <TimeWheelColumn max={23} value={hours} onChange={setHours} unit="시간" />
+        <div className="grid grid-cols-2 gap-2">
           <TimeWheelColumn max={59} value={minutes} onChange={setMinutes} unit="분" />
           <TimeWheelColumn max={59} value={seconds} onChange={setSeconds} unit="초" />
         </div>
