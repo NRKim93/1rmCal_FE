@@ -189,6 +189,7 @@ export default function FreeTrainingPage() {
   const [restPickerTarget, setRestPickerTarget] = useState<RestPickerTarget | null>(null);
   const [activeRestCountdown, setActiveRestCountdown] = useState<RestCountdownTarget | null>(null);
   const [isRestCountdownModalOpen, setIsRestCountdownModalOpen] = useState(false);
+  const [isElapsedTimerUserPaused, setIsElapsedTimerUserPaused] = useState(false);
   const [exercises, setExercises] = useState<TrainingExercise[]>([]);
   const [latestHistoryItems, setLatestHistoryItems] = useState<TrainingHistoryItem[]>([]);
 
@@ -317,6 +318,7 @@ export default function FreeTrainingPage() {
   const trainingDateLabel = useMemo(() => `${todayYYYYMMDD()} 트레이닝 기록`, []);
 
   const addExercise = (exerciseName: string) => {
+    setIsElapsedTimerUserPaused(false);
     const exerciseId = makeId("ex");
     const previousItems = getPreviousItemsForExercise(exerciseName);
     setExercises((prev) => {
@@ -342,6 +344,7 @@ export default function FreeTrainingPage() {
   };
 
   const addSet = (exerciseId: string) => {
+    setIsElapsedTimerUserPaused(false);
     setExercises((prev) =>
       prev.map((exercise) => {
         if (exercise.id !== exerciseId) return exercise;
@@ -534,6 +537,11 @@ export default function FreeTrainingPage() {
     return selectedSet?.restSec ?? 0;
   }, [exercises, restPickerTarget]);
 
+  const totalSetCount = useMemo(
+    () => exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0),
+    [exercises]
+  );
+
   const changeWeight = (exerciseId: string, setId: string, value: string) => {
     const trimmed = value.trim();
     if (trimmed !== "" && !/^\d*\.?\d{0,2}$/.test(trimmed)) return;
@@ -584,19 +592,34 @@ export default function FreeTrainingPage() {
   };
 
   useEffect(() => {
-    if (exercises.length > 0) {
-      startElapsedTimer();
+    if (totalSetCount === 0) {
+      resetElapsedTimer(0);
+      setIsElapsedTimerUserPaused(false);
       return;
     }
-    resetElapsedTimer(0);
-  }, [exercises.length, startElapsedTimer, resetElapsedTimer]);
 
-  const toggleElapsedTimer = () => {
-    if (exercises.length === 0) return;
-    if (isElapsedTimerRunning) {
+    if (isElapsedTimerUserPaused) {
       pauseElapsedTimer();
       return;
     }
+
+    startElapsedTimer();
+  }, [
+    totalSetCount,
+    isElapsedTimerUserPaused,
+    pauseElapsedTimer,
+    startElapsedTimer,
+    resetElapsedTimer,
+  ]);
+
+  const toggleElapsedTimer = () => {
+    if (totalSetCount === 0) return;
+    if (isElapsedTimerRunning) {
+      pauseElapsedTimer();
+      setIsElapsedTimerUserPaused(true);
+      return;
+    }
+    setIsElapsedTimerUserPaused(false);
     startElapsedTimer();
   };
 
@@ -648,7 +671,7 @@ export default function FreeTrainingPage() {
             type="button"
             className="flex items-center gap-2 rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             onClick={toggleElapsedTimer}
-            disabled={exercises.length === 0}
+            disabled={totalSetCount === 0}
             aria-label={isElapsedTimerRunning ? "운동 타이머 일시정지" : "운동 타이머 시작"}
           >
             <span className="text-base leading-none">{isElapsedTimerRunning ? "⏸" : "▶"}</span>
