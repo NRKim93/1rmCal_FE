@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/common/Header";
 import { Button } from "@/components/common/Button";
 import TrainingExerciseCard from "./(components)/TrainingExerciseCard/TrainingExerciseCard";
 import TrainingSearchModal from "./(components)/SearchModal/TrainingSearchModal";
 import RestTimePickerModal from "./(components)/RestTimePickerModal/RestTimePickerModal";
+import RestCountdownModal from "./(components)/RestCountdownModal/RestCountdownModal";
 import { TrainingExercise, TrainingHistoryItem, TrainingSet, WeightUnit } from "@/lib/types/training";
 import { useTrainingAutoCompleteQuery } from "@/lib/query/training";
 import { getLatestHistory } from "@/services/trainingMain.service";
@@ -88,9 +89,77 @@ type RestPickerTarget =
   | { type: "latestSet"; exerciseId: string; setId: string };
 
 type LatestSetTarget = { exerciseId: string; setId: string; restSec: number; createdAt: number };
+type RestCountdownTarget = {
+  exerciseId: string;
+  setId: string;
+  exerciseName: string;
+  setNumber: number;
+  totalSeconds: number;
+};
 
 export default function FreeTrainingPage() {
   const router = useRouter();
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const ensureAudioContext = () => {
+    if (typeof window === "undefined") return null;
+
+    const audioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!audioContextClass) return null;
+    if (!audioContextRef.current) {
+      audioContextRef.current = new audioContextClass();
+    }
+    return audioContextRef.current;
+  };
+
+  const primeRestDoneSound = async () => {
+    const context = ensureAudioContext();
+    if (!context) return;
+    if (context.state === "suspended") {
+      try {
+        await context.resume();
+      } catch {
+        // Ignore; some browsers block resume until next user gesture.
+      }
+    }
+  };
+
+  const playRestDoneSound = async () => {
+    const context = ensureAudioContext();
+    if (!context) return;
+
+    if (context.state === "suspended") {
+      try {
+        await context.resume();
+      } catch {
+        return;
+      }
+    }
+
+    const startAt = context.currentTime;
+    const offsets = [0, 0.2];
+
+    offsets.forEach((offset) => {
+      const osc = context.createOscillator();
+      const gain = context.createGain();
+      const at = startAt + offset;
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, at);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.15, at + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.16);
+
+      osc.connect(gain);
+      gain.connect(context.destination);
+      osc.start(at);
+      osc.stop(at + 0.18);
+    });
+  };
+
   const {
     seconds: elapsedSeconds,
     isRunning: isElapsedTimerRunning,
@@ -98,11 +167,28 @@ export default function FreeTrainingPage() {
     pause: pauseElapsedTimer,
     reset: resetElapsedTimer,
   } = useTimer({ autoStart: false, direction: "up" });
+  const {
+    seconds: restCountdownSeconds,
+    isRunning: isRestCountdownRunning,
+    start: startRestCountdown,
+    pause: pauseRestCountdown,
+    reset: resetRestCountdown,
+  } = useTimer({
+    autoStart: false,
+    direction: "down",
+    minSeconds: 0,
+    onComplete: () => {
+      void playRestDoneSound();
+      setActiveRestCountdown(null);
+    },
+  });
 
   const [searchModalMode, setSearchModalMode] = useState<"add" | "change">("add");
   const [searchTargetExerciseId, setSearchTargetExerciseId] = useState<string | null>(null);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [restPickerTarget, setRestPickerTarget] = useState<RestPickerTarget | null>(null);
+  const [activeRestCountdown, setActiveRestCountdown] = useState<RestCountdownTarget | null>(null);
+  const [isRestCountdownModalOpen, setIsRestCountdownModalOpen] = useState(false);
   const [exercises, setExercises] = useState<TrainingExercise[]>([]);
   const [latestHistoryItems, setLatestHistoryItems] = useState<TrainingHistoryItem[]>([]);
 
@@ -277,6 +363,11 @@ export default function FreeTrainingPage() {
   };
 
   const toggleDone = (exerciseId: string, setId: string) => {
+    const targetExercise = exercises.find((exercise) => exercise.id === exerciseId);
+    const targetSetIndex = targetExercise?.sets.findIndex((set) => set.id === setId) ?? -1;
+    const targetSet = targetSetIndex >= 0 ? targetExercise?.sets[targetSetIndex] : null;
+    const nextDone = targetSet ? !targetSet.done : false;
+
     setExercises((prev) =>
       prev.map((exercise) => {
         if (exercise.id !== exerciseId) return exercise;
@@ -286,6 +377,31 @@ export default function FreeTrainingPage() {
         };
       })
     );
+
+    if (!targetExercise || !targetSet || targetSetIndex < 0) return;
+
+    if (nextDone && targetSet.restSec > 0) {
+      void primeRestDoneSound();
+      setActiveRestCountdown({
+        exerciseId,
+        setId,
+        exerciseName: targetExercise.name,
+        setNumber: targetSetIndex + 1,
+        totalSeconds: targetSet.restSec,
+      });
+      setIsRestCountdownModalOpen(true);
+      return;
+    }
+
+    if (
+      !nextDone &&
+      activeRestCountdown &&
+      activeRestCountdown.exerciseId === exerciseId &&
+      activeRestCountdown.setId === setId
+    ) {
+      setActiveRestCountdown(null);
+      setIsRestCountdownModalOpen(false);
+    }
   };
 
   const removeExercise = (exerciseId: string) => {
@@ -484,6 +600,43 @@ export default function FreeTrainingPage() {
     startElapsedTimer();
   };
 
+  useEffect(() => {
+    if (!activeRestCountdown) {
+      pauseRestCountdown();
+      resetRestCountdown(0);
+      setIsRestCountdownModalOpen(false);
+      return;
+    }
+
+    resetRestCountdown(activeRestCountdown.totalSeconds);
+    startRestCountdown();
+  }, [activeRestCountdown, pauseRestCountdown, resetRestCountdown, startRestCountdown]);
+
+  const skipRestCountdown = () => {
+    pauseRestCountdown();
+    setActiveRestCountdown(null);
+    setIsRestCountdownModalOpen(false);
+  };
+
+  const toggleRestCountdown = () => {
+    if (!activeRestCountdown) return;
+
+    if (isRestCountdownRunning) {
+      pauseRestCountdown();
+      return;
+    }
+    startRestCountdown();
+  };
+
+  const dismissRestCountdownModal = () => {
+    setIsRestCountdownModalOpen(false);
+  };
+
+  const reopenRestCountdownModal = () => {
+    if (!activeRestCountdown) return;
+    setIsRestCountdownModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 font-sans">
       <Header className="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4 shadow-sm">
@@ -576,6 +729,35 @@ export default function FreeTrainingPage() {
           </Button>
         </div>
       </footer>
+      {activeRestCountdown && !isRestCountdownModalOpen ? (
+        <div className="fixed inset-x-0 bottom-[88px] z-40">
+          <div className="mx-auto w-full max-w-[560px] px-5">
+            <div className="rounded-xl border border-sky-200 bg-white/95 px-4 py-3 shadow-[0_6px_16px_rgba(0,0,0,0.12)] backdrop-blur">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-sky-700">휴식 타이머 진행 중</p>
+                  <p className="truncate text-sm text-gray-700">
+                    {activeRestCountdown.exerciseName} - Set {activeRestCountdown.setNumber}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xl font-bold tabular-nums text-gray-900">
+                    {formatMMSS(restCountdownSeconds)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-0 bg-gray-200 text-black"
+                    onClick={reopenRestCountdownModal}
+                  >
+                    보기
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <TrainingSearchModal
         isOpen={isSearchModalOpen}
@@ -623,6 +805,17 @@ export default function FreeTrainingPage() {
           }
           setRestPickerTarget(null);
         }}
+      />
+      <RestCountdownModal
+        isOpen={activeRestCountdown !== null && isRestCountdownModalOpen}
+        exerciseName={activeRestCountdown?.exerciseName ?? ""}
+        setNumber={activeRestCountdown?.setNumber ?? 0}
+        totalSeconds={activeRestCountdown?.totalSeconds ?? 0}
+        remainingSeconds={restCountdownSeconds}
+        isRunning={isRestCountdownRunning}
+        onDismiss={dismissRestCountdownModal}
+        onToggleRunning={toggleRestCountdown}
+        onSkip={skipRestCountdown}
       />
     </div>
   );
