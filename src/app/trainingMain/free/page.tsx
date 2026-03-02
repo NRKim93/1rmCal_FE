@@ -84,6 +84,15 @@ function formatMMSS(totalSec: number) {
   return `${mm}:${ss}`;
 }
 
+function parseRepsInput(raw: string) {
+  const trimmed = raw.trim();
+  if (trimmed === "") return 0;
+  if (!/^\d+$/.test(trimmed)) return null;
+
+  const next = Number(trimmed);
+  return Number.isFinite(next) ? next : null;
+}
+
 type RestPickerTarget =
   | { type: "exercise"; exerciseId: string }
   | { type: "latestSet"; exerciseId: string; setId: string };
@@ -186,12 +195,14 @@ export default function FreeTrainingPage() {
   const [searchModalMode, setSearchModalMode] = useState<"add" | "change">("add");
   const [searchTargetExerciseId, setSearchTargetExerciseId] = useState<string | null>(null);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [setEditModeExerciseId, setSetEditModeExerciseId] = useState<string | null>(null);
   const [restPickerTarget, setRestPickerTarget] = useState<RestPickerTarget | null>(null);
   const [activeRestCountdown, setActiveRestCountdown] = useState<RestCountdownTarget | null>(null);
   const [isRestCountdownModalOpen, setIsRestCountdownModalOpen] = useState(false);
   const [isElapsedTimerUserPaused, setIsElapsedTimerUserPaused] = useState(false);
   const [exercises, setExercises] = useState<TrainingExercise[]>([]);
   const [latestHistoryItems, setLatestHistoryItems] = useState<TrainingHistoryItem[]>([]);
+  const initialExercisesJsonRef = useRef<string>("[]");
 
   const { data: autoCompleteList = [] } = useTrainingAutoCompleteQuery(true);
 
@@ -408,6 +419,9 @@ export default function FreeTrainingPage() {
   };
 
   const removeExercise = (exerciseId: string) => {
+    if (setEditModeExerciseId === exerciseId) {
+      setSetEditModeExerciseId(null);
+    }
     setExercises((prev) => prev.filter((exercise) => exercise.id !== exerciseId));
   };
 
@@ -441,6 +455,10 @@ export default function FreeTrainingPage() {
 
   const setExerciseRest = (exerciseId: string) => {
     setRestPickerTarget({ type: "exercise", exerciseId });
+  };
+
+  const toggleSetEditMode = (exerciseId: string) => {
+    setSetEditModeExerciseId((prev) => (prev === exerciseId ? null : exerciseId));
   };
 
   const openChangeExerciseModal = (exerciseId: string) => {
@@ -541,6 +559,10 @@ export default function FreeTrainingPage() {
     () => exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0),
     [exercises]
   );
+  const hasUnsavedChanges = useMemo(
+    () => JSON.stringify(exercises) !== initialExercisesJsonRef.current,
+    [exercises]
+  );
 
   const changeWeight = (exerciseId: string, setId: string, value: string) => {
     const trimmed = value.trim();
@@ -574,7 +596,7 @@ export default function FreeTrainingPage() {
   };
 
   const changeReps = (exerciseId: string, setId: string, value: string) => {
-    const nextReps = value.trim() === "" ? 0 : Number.isNaN(Number(value)) ? null : Number(value);
+    const nextReps = parseRepsInput(value);
 
     setExercises((prev) =>
       prev.map((exercise) => {
@@ -587,6 +609,43 @@ export default function FreeTrainingPage() {
             return { ...set, reps: nextReps };
           }),
         };
+      })
+    );
+  };
+
+  const reorderSets = (exerciseId: string, sourceSetId: string, targetSetId: string) => {
+    setExercises((prev) =>
+      prev.map((exercise) => {
+        if (exercise.id !== exerciseId) return exercise;
+
+        const from = exercise.sets.findIndex((set) => set.id === sourceSetId);
+        const to = exercise.sets.findIndex((set) => set.id === targetSetId);
+        if (from < 0 || to < 0 || from === to) return exercise;
+
+        const nextSets = [...exercise.sets];
+        const [picked] = nextSets.splice(from, 1);
+        nextSets.splice(to, 0, picked);
+
+        return { ...exercise, sets: nextSets };
+      })
+    );
+  };
+
+  const removeSet = (exerciseId: string, setId: string) => {
+    if (
+      activeRestCountdown &&
+      activeRestCountdown.exerciseId === exerciseId &&
+      activeRestCountdown.setId === setId
+    ) {
+      setActiveRestCountdown(null);
+      setIsRestCountdownModalOpen(false);
+    }
+
+    setExercises((prev) =>
+      prev.map((exercise) => {
+        if (exercise.id !== exerciseId) return exercise;
+        if (exercise.sets.length <= 1) return exercise;
+        return { ...exercise, sets: exercise.sets.filter((set) => set.id !== setId) };
       })
     );
   };
@@ -660,6 +719,36 @@ export default function FreeTrainingPage() {
     setIsRestCountdownModalOpen(true);
   };
 
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const handleFinish = () => {
+    if (
+      hasUnsavedChanges &&
+      !window.confirm("저장되지 않은 변경사항이 있습니다.\n정말 페이지를 나가시겠습니까?")
+    ) {
+      return;
+    }
+    router.back();
+  };
+
+  const handleCancelTraining = () => {
+    const ok = window.confirm(
+      "금일 트레이닝을 취소하고 이전 페이지로 이동할까요?\n작성한 내용은 저장되지 않습니다."
+    );
+    if (!ok) return;
+    router.back();
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 font-sans">
       <Header className="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4 shadow-sm">
@@ -678,7 +767,7 @@ export default function FreeTrainingPage() {
             <span className="font-mono">{formatHMS(elapsedSeconds)}</span>
           </button>
         </div>
-        <Button variant="outline" size="sm" className="bg-white px-4 font-semibold" onClick={() => router.back()}>
+        <Button variant="outline" size="sm" className="bg-white px-4 font-semibold" onClick={handleFinish}>
           finish
         </Button>
       </Header>
@@ -698,6 +787,8 @@ export default function FreeTrainingPage() {
               index={idx + 1}
               exercise={exercise}
               onAddSet={() => addSet(exercise.id)}
+              isSetEditMode={setEditModeExerciseId === exercise.id}
+              onToggleSetEditMode={() => toggleSetEditMode(exercise.id)}
               onRemoveExercise={() => removeExercise(exercise.id)}
               onSetRestTime={() => setExerciseRest(exercise.id)}
               onChangeExercise={() => openChangeExerciseModal(exercise.id)}
@@ -707,6 +798,10 @@ export default function FreeTrainingPage() {
               onChangeWeight={(setId, value) => changeWeight(exercise.id, setId, value)}
               onChangeUnit={(setId, unit) => changeUnit(exercise.id, setId, unit)}
               onChangeReps={(setId, value) => changeReps(exercise.id, setId, value)}
+              onRemoveSet={(setId) => removeSet(exercise.id, setId)}
+              onReorderSets={(sourceSetId, targetSetId) =>
+                reorderSets(exercise.id, sourceSetId, targetSetId)
+              }
             />
           ))}
         </div>
@@ -747,7 +842,7 @@ export default function FreeTrainingPage() {
           >
             휴식 타이머
           </Button>
-          <Button variant="danger" size="md" fullWidth className="font-semibold">
+          <Button variant="danger" size="md" fullWidth className="font-semibold" onClick={handleCancelTraining}>
             금일 트레이닝 취소
           </Button>
         </div>
