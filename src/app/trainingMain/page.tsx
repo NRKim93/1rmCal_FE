@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { getLatestHistory } from "@/services/trainingMain.service";
 import { hasLogin } from "@/services/auth.service";
 import { Exercise } from "@/lib/types";
+import { parseSeq } from "@/lib/utils/seq";
 import { Header } from "@/components/common/Header";
 import ProgramCard from "./(components)/ProgramCard/ProgramCard";
 import TrainingSection from "./(components)/TrainingSection/TrainingSection";
@@ -41,7 +42,11 @@ export default function TrainingMainPage() {
           return;
         }
 
-        const seq = Number(seqStr);
+        const seq = parseSeq(seqStr);
+        if (seq === null) {
+          console.error("invalid seq in localStorage");
+          return;
+        }
         const response = await getLatestHistory(seq);
 
         // 응답 데이터 확인 및 매핑

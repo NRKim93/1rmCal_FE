@@ -11,6 +11,7 @@ import RestCountdownModal from "./(components)/RestCountdownModal/RestCountdownM
 import { TrainingExercise, TrainingHistoryItem, TrainingSet, WeightUnit } from "@/lib/types/training";
 import { useTrainingAutoCompleteQuery } from "@/lib/query/training";
 import { getLatestHistory } from "@/services/trainingMain.service";
+import { parseSeq } from "@/lib/utils/seq";
 import { useTimer } from "@/hooks/useTimer";
 
 function pad2(value: number) {
@@ -312,8 +313,11 @@ export default function FreeTrainingPage() {
     const fetchLatestHistory = async () => {
       try {
         const seqStr = localStorage.getItem("seq");
-        if (!seqStr) return;
-        const seq = Number(seqStr);
+        const seq = parseSeq(seqStr);
+        if (seq === null) {
+          console.error("invalid seq in localStorage");
+          return;
+        }
         const response = await getLatestHistory(seq);
         const latestTraining = response?.data?.data?.[0];
         const trainingHistory = latestTraining?.training_history ?? [];
