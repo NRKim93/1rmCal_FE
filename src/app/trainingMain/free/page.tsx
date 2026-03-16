@@ -8,9 +8,15 @@ import TrainingExerciseCard from "./(components)/TrainingExerciseCard/TrainingEx
 import TrainingSearchModal from "./(components)/SearchModal/TrainingSearchModal";
 import RestTimePickerModal from "./(components)/RestTimePickerModal/RestTimePickerModal";
 import RestCountdownModal from "./(components)/RestCountdownModal/RestCountdownModal";
-import { TrainingExercise, TrainingHistoryItem, TrainingSet, WeightUnit } from "@/lib/types/training";
+import {
+  TrainingCreate,
+  TrainingExercise,
+  TrainingHistoryItem,
+  TrainingSet,
+  WeightUnit,
+} from "@/lib/types/training";
 import { useTrainingAutoCompleteQuery } from "@/lib/query/training";
-import { getLatestHistory } from "@/services/trainingMain.service";
+import { getLatestHistory, trainingCreate } from "@/services/trainingMain.service";
 import { parseSeq } from "@/lib/utils/seq";
 import { useTimer } from "@/hooks/useTimer";
 
@@ -201,6 +207,7 @@ export default function FreeTrainingPage() {
   const [activeRestCountdown, setActiveRestCountdown] = useState<RestCountdownTarget | null>(null);
   const [isRestCountdownModalOpen, setIsRestCountdownModalOpen] = useState(false);
   const [isElapsedTimerUserPaused, setIsElapsedTimerUserPaused] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [exercises, setExercises] = useState<TrainingExercise[]>([]);
   const [latestHistoryItems, setLatestHistoryItems] = useState<TrainingHistoryItem[]>([]);
   const initialExercisesJsonRef = useRef<string>("[]");
@@ -735,14 +742,64 @@ export default function FreeTrainingPage() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  const handleFinish = () => {
-    if (
-      hasUnsavedChanges &&
-      !window.confirm("저장되지 않은 변경사항이 있습니다.\n정말 페이지를 나가시겠습니까?")
-    ) {
+  const buildTrainingCreatePayload = (userSeq: number, trainingSeq: number): TrainingCreate[] => {
+    const payload: TrainingCreate[] = [];
+
+    exercises.forEach((exercise) => {
+      const name = exercise.name.trim();
+      if (!name) return;
+
+      exercise.sets.forEach((set, index) => {
+        const parsedWeight = Number.parseFloat(set.weight);
+        payload.push({
+          trainingSeq,
+          userSeq,
+          name,
+          weight: Number.isFinite(parsedWeight) ? parsedWeight : 0,
+          weightUnit: set.unit,
+          reps: Number.isFinite(set.reps) ? Math.max(0, set.reps) : 0,
+          rest: formatMMSS(set.restSec),
+          sets: index + 1,
+        });
+      });
+    });
+
+    return payload;
+  };
+
+  const handleFinish = async () => {
+    if (isSaving) return;
+
+    if (!hasUnsavedChanges) {
+      router.back();
       return;
     }
-    router.back();
+
+    const seqStr = localStorage.getItem("seq");
+    const userSeq = parseSeq(seqStr);
+    if (userSeq === null) {
+      window.alert("로그인이 필요합니다.");
+      return;
+    }
+
+    const trainingSeq = Math.floor(Date.now() / 1000);
+    const payload = buildTrainingCreatePayload(userSeq, trainingSeq);
+    if (payload.length === 0) {
+      window.alert("저장할 트레이닝 세트가 없습니다.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await trainingCreate(payload);
+      initialExercisesJsonRef.current = JSON.stringify(exercises);
+      router.back();
+    } catch (error) {
+      console.error("training create failed", error);
+      window.alert("저장 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancelTraining = () => {
@@ -771,8 +828,14 @@ export default function FreeTrainingPage() {
             <span className="font-mono">{formatHMS(elapsedSeconds)}</span>
           </button>
         </div>
-        <Button variant="outline" size="sm" className="bg-white px-4 font-semibold" onClick={handleFinish}>
-          finish
+        <Button
+          variant="outline"
+          size="sm"
+          className="bg-white px-4 font-semibold"
+          onClick={handleFinish}
+          disabled={isSaving}
+        >
+          {isSaving ? "saving..." : "finish"}
         </Button>
       </Header>
 
