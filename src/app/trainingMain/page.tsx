@@ -68,6 +68,11 @@ export default function TrainingMainPage() {
           }));
 
           setExercises(mappedExercises);
+
+          // 트레이닝 시작 시 사용할 수 있도록 sessionStorage에 저장
+          const jsonData = JSON.stringify(trainingHistory);
+          console.log('✅ trainingMain: sessionStorage에 저장', trainingHistory);
+          sessionStorage.setItem('latestTrainingHistory', jsonData);
         }
       } catch (error) {
         console.error("운동 기록을 불러오는데 실패했습니다:", error);
@@ -78,6 +83,11 @@ export default function TrainingMainPage() {
   }, [isLoading]);
 
   const handleBack = () => router.back();
+
+  const handleStartTraining = () => {
+    // sessionStorage에 이미 저장된 trainingHistory를 사용해서 이동
+    router.push("/trainingMain/free?mode=program");
+  };
 
   if (isLoading) {
     return <div>로딩 중...</div>;
@@ -92,14 +102,14 @@ export default function TrainingMainPage() {
         <ProgramCard
           exercises={exercises}
           trainingDate={trainingDate}
-          onStartTraining={() => router.push("/trainingMain/free")}
+          onStartTraining={handleStartTraining}
         />
       </section>
 
       <TrainingSection
         title="자유 트레이닝"
         buttonText="자유 트레이닝 시작"
-        onButtonClick={() => router.push("/trainingMain/free")}
+        onButtonClick={() => router.push("/trainingMain/free?mode=free")}
       />
 
       <TrainingSection

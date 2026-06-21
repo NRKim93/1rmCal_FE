@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/common/Header";
 import { Button } from "@/components/common/Button";
 import TrainingExerciseCard from "./(components)/TrainingExerciseCard/TrainingExerciseCard";
@@ -114,7 +114,17 @@ type RestCountdownTarget = {
 };
 
 export default function FreeTrainingPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <FreeTrainingContent />
+    </React.Suspense>
+  );
+}
+
+function FreeTrainingContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode") ?? "free"; // "free" 또는 "program"
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const ensureAudioContext = () => {
@@ -319,6 +329,35 @@ export default function FreeTrainingPage() {
   useEffect(() => {
     const fetchLatestHistory = async () => {
       try {
+        // mode=free인 경우: sessionStorage를 무시하고 초기 상태 유지
+        if (mode === "free") {
+          console.log("📌 자유 트레이닝 모드: 초기 상태 유지");
+          return;
+        }
+
+        // mode=program인 경우: sessionStorage에서 프로그램 기록 로드
+        console.log("🎯 프로그램 모드: sessionStorage에서 로드 시도");
+
+        const savedHistory = sessionStorage.getItem("latestTrainingHistory");
+        console.log('📨 free page: sessionStorage 확인', savedHistory);
+        if (savedHistory) {
+          try {
+            const parsed = JSON.parse(savedHistory);
+            console.log('✅ free page: sessionStorage 파싱 성공', parsed);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setLatestHistoryItems(parsed);
+              console.log('✅ free page: latestHistoryItems 설정됨', parsed);
+              // 사용한 후 sessionStorage에서 삭제
+              sessionStorage.removeItem("latestTrainingHistory");
+              return;
+            }
+          } catch (e) {
+            console.error("❌ sessionStorage parse error:", e);
+            sessionStorage.removeItem("latestTrainingHistory");
+          }
+        }
+
+        // sessionStorage에 없으면 API에서 가져오기 (fallback)
         const seqStr = localStorage.getItem("seq");
         const seq = parseSeq(seqStr);
         if (seq === null) {
@@ -335,7 +374,61 @@ export default function FreeTrainingPage() {
     };
 
     fetchLatestHistory();
-  }, []);
+  }, [mode]);
+
+  // latestHistoryItems를 받으면 exercises 자동 구성
+  useEffect(() => {
+    if (latestHistoryItems.length === 0) return;
+
+    console.log('🔄 latestHistoryItems 기반으로 exercises 생성', latestHistoryItems);
+
+    // latestHistoryItems를 기반으로 exercises 구성
+    const newExercises: TrainingExercise[] = latestHistoryItems.map((item) => {
+      const exerciseId = makeId("ex");
+      const sets: TrainingSet[] = [];
+
+      // 같은 이름의 운동들을 grouping해서 set으로 변환
+      const sameNameItems = latestHistoryItems.filter((i) => i.name === item.name);
+
+      sameNameItems.forEach((historyItem, idx) => {
+        sets.push({
+          id: makeId("set"),
+          previous: formatPrevious(historyItem),
+          weight: String(historyItem.weight),
+          unit: (historyItem.weight_unit as WeightUnit) || "kg",
+          reps: Number(historyItem.reps) || 0,
+          restSec: 0,
+          done: false,
+        });
+      });
+
+      return {
+        id: exerciseId,
+        name: item.name,
+        restLabel: "00:00",
+        sets: sets.length > 0 ? sets : [
+          {
+            id: makeId("set"),
+            previous: formatPrevious(item),
+            weight: String(item.weight),
+            unit: (item.weight_unit as WeightUnit) || "kg",
+            reps: Number(item.reps) || 0,
+            restSec: 0,
+            done: false,
+          },
+        ],
+      };
+    });
+
+    // 중복 제거 (같은 이름의 운동은 하나로 통합)
+    const uniqueExercises = Array.from(
+      new Map(newExercises.map((ex) => [ex.name, ex])).values()
+    );
+
+    console.log('✅ exercises 생성 완료', uniqueExercises);
+    setExercises(uniqueExercises);
+    initialExercisesJsonRef.current = JSON.stringify(uniqueExercises);
+  }, [latestHistoryItems]);
 
   const trainingDateLabel = useMemo(() => `${todayYYYYMMDD()} 트레이닝 기록`, []);
 
