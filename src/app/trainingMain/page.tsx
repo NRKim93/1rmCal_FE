@@ -1,22 +1,37 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getLatestHistory } from "@/services/trainingMain.service";
 import { hasLogin } from "@/services/auth.service";
-import { Exercise } from "@/lib/types";
+import { Exercise, TrainingData, TrainingHistoryItem } from "@/lib/types";
 import { parseSeq } from "@/lib/utils/seq";
 import { Header } from "@/components/common/Header";
 import ProgramCard from "./(components)/ProgramCard/ProgramCard";
 import TrainingSection from "./(components)/TrainingSection/TrainingSection";
 
-export default function TrainingMainPage() {
-  const router = useRouter();
+interface TrainingSlide {
+  seq: number;
+  trainingDate: string;
+  trainingHistory: TrainingHistoryItem[];
+  exercises: Exercise[];
+}
 
-  const [exercises, setExercises] = useState<Exercise[]>([
+const fallbackSlide: TrainingSlide = {
+  seq: 0,
+  trainingDate: "",
+  trainingHistory: [],
+  exercises: [
     { name: "종목 1", sets: 3, weight: "0kg", topSet: "15 reps" },
     { name: "종목 2", sets: 3, weight: "0kg", topSet: "15 reps" },
-  ]);
-  const [trainingDate, setTrainingDate] = useState<string>("");
+  ],
+};
+
+export default function TrainingMainPage() {
+  const router = useRouter();
+  const touchStartX = useRef<number | null>(null);
+
+  const [trainingSlides, setTrainingSlides] = useState<TrainingSlide[]>([fallbackSlide]);
+  const [activeSlide, setActiveSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   // 1) 로그인 체크
@@ -51,28 +66,20 @@ export default function TrainingMainPage() {
 
         // 응답 데이터 확인 및 매핑
         if (response?.data?.data && response.data.data.length > 0) {
-          const latestTraining = response.data.data[0];
-          const trainingHistory = latestTraining.training_history;
-
-          // training_date 저장
-          if (latestTraining.training_date) {
-            setTrainingDate(latestTraining.training_date);
-          }
-
-          // training_history를 exercises 형태로 변환
-          const mappedExercises = trainingHistory.map((item) => ({
-            name: item.name,
-            sets: 1,
-            weight: `${item.weight}${item.weight_unit}`,
-            topSet: `${item.reps} reps`
+          const slides = response.data.data.slice(0, 5).map((training: TrainingData) => ({
+            seq: training.seq,
+            trainingDate: training.training_date,
+            trainingHistory: training.training_history,
+            exercises: training.training_history.map((item) => ({
+              name: item.name,
+              sets: 1,
+              weight: `${item.weight}${item.weight_unit}`,
+              topSet: `${item.reps} reps`,
+            })),
           }));
 
-          setExercises(mappedExercises);
-
-          // 트레이닝 시작 시 사용할 수 있도록 sessionStorage에 저장
-          const jsonData = JSON.stringify(trainingHistory);
-          console.log('✅ trainingMain: sessionStorage에 저장', trainingHistory);
-          sessionStorage.setItem('latestTrainingHistory', jsonData);
+          setTrainingSlides(slides);
+          setActiveSlide(0);
         }
       } catch (error) {
         console.error("운동 기록을 불러오는데 실패했습니다:", error);
@@ -84,9 +91,43 @@ export default function TrainingMainPage() {
 
   const handleBack = () => router.back();
 
-  const handleStartTraining = () => {
-    // sessionStorage에 이미 저장된 trainingHistory를 사용해서 이동
+  const handleStartTraining = (slide: TrainingSlide) => {
+    sessionStorage.setItem(
+      "latestTrainingHistory",
+      JSON.stringify(slide.trainingHistory),
+    );
     router.push("/trainingMain/free?mode=program");
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = event.touches[0]?.clientX ?? null;
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartX.current === null) return;
+
+    const touchEndX = event.changedTouches[0]?.clientX;
+    if (touchEndX === undefined) return;
+
+    const swipeDistance = touchEndX - touchStartX.current;
+    touchStartX.current = null;
+
+    if (Math.abs(swipeDistance) < 50) return;
+    setActiveSlide((current) =>
+      Math.min(
+        Math.max(current + (swipeDistance < 0 ? 1 : -1), 0),
+        trainingSlides.length - 1,
+      ),
+    );
+  };
+
+  const getTrainingName = (slide: TrainingSlide, index: number) => {
+    if (!slide.trainingDate) return `트레이닝 ${index + 1}`;
+
+    const date = new Date(slide.trainingDate);
+    if (Number.isNaN(date.getTime())) return `트레이닝 ${index + 1}`;
+
+    return `${date.getMonth() + 1}월 ${date.getDate()}일 트레이닝`;
   };
 
   if (isLoading) {
@@ -99,11 +140,49 @@ export default function TrainingMainPage() {
 
       <section className="p-5">
         <h2 className="mb-4 text-lg font-semibold text-gray-800">현재 진행중인 프로그램</h2>
-        <ProgramCard
-          exercises={exercises}
-          trainingDate={trainingDate}
-          onStartTraining={handleStartTraining}
-        />
+
+        <div
+          className="overflow-hidden"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div
+            className="flex items-start transition-transform duration-300 ease-out"
+            style={{ transform: `translateX(-${activeSlide * 100}%)` }}
+          >
+            {trainingSlides.map((slide, index) => (
+              <div
+                key={slide.seq || `fallback-${index}`}
+                className="w-full shrink-0"
+                aria-hidden={activeSlide !== index}
+              >
+                <ProgramCard
+                  trainingName={getTrainingName(slide, index)}
+                  exercises={slide.exercises}
+                  trainingDate={slide.trainingDate}
+                  onStartTraining={() => handleStartTraining(slide)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {trainingSlides.length > 1 && (
+          <div className="mt-4 flex justify-center gap-2" aria-label="트레이닝 카드 위치">
+            {trainingSlides.map((slide, index) => (
+              <button
+                key={slide.seq || `indicator-${index}`}
+                type="button"
+                onClick={() => setActiveSlide(index)}
+                aria-label={`${index + 1}번째 트레이닝 보기`}
+                aria-current={activeSlide === index ? "true" : undefined}
+                className={`h-2.5 w-2.5 rounded-full transition-colors ${
+                  activeSlide === index ? "bg-gray-800" : "bg-gray-300"
+                }`}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       <TrainingSection

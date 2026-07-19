@@ -5,6 +5,7 @@ import { Exercise } from '@/lib/types';
 import ExerciseTable from '../ExerciseTable/ExerciseTable';
 
 interface ProgramCardProps {
+  trainingName?: string;
   exercises: Exercise[];
   trainingDate?: string; // YYYY-MM-DD HH:mm:ss 형식
   onStartTraining?: () => void;
@@ -22,7 +23,7 @@ function formatTrainingDate(dateString: string): string {
   return `${month}월 ${week}주차`;
 }
 
-export default function ProgramCard({ exercises, trainingDate, onStartTraining }: ProgramCardProps) {
+export default function ProgramCard({ trainingName, exercises, trainingDate, onStartTraining }: ProgramCardProps) {
   return (
     <div className="rounded-lg bg-white p-5 shadow-[0_2px_4px_rgba(0,0,0,0.1)]">
       <div className="mb-5 flex items-center">
@@ -30,7 +31,9 @@ export default function ProgramCard({ exercises, trainingDate, onStartTraining }
           트레이닝 아이콘
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-base font-bold text-gray-800">트레이닝 명</span>
+          <span className="text-base font-bold text-gray-800">
+            {trainingName ?? '트레이닝 명'}
+          </span>
           <span className="text-sm text-gray-600">
             {trainingDate ? formatTrainingDate(trainingDate) : 'N주차 • M일차'}
           </span>
