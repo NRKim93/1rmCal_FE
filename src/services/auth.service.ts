@@ -14,6 +14,6 @@ export const signup = (payload : SignUpPayload) => {
 
 export const hasLogin = async () => {
     return await instance.get<
-    APIResponse <{data: {isLoggedIn:boolean}}>
+    APIResponse<{data: number}>
     >("/api/v1/auth/status");
 };

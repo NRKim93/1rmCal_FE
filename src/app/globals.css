@@ -160,34 +160,24 @@
     background: #e8e8e8;
   }
 
+  .workout-calendar__markers {
+    @apply absolute bottom-2 flex flex-col items-center gap-1;
+  }
+
   .workout-calendar__todayLabel {
-    @apply absolute bottom-2 font-normal leading-none;
+    @apply font-normal leading-none;
     font-size: 11px;
     color: #ff9500;
   }
 
-  .workout-calendar__trainingIndicator {
-    @apply absolute bottom-1 flex w-full justify-center;
+  .workout-calendar__trainingBadge {
+    @apply inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 font-semibold leading-none text-green-700;
+    font-size: 10px;
   }
 
-  .workout-calendar__dot {
-    @apply font-bold leading-none;
-    font-size: 8px;
-    color: #4caf50;
+  .workout-calendar .react-calendar__tile--active .workout-calendar__trainingBadge {
+    @apply bg-green-200 text-green-800;
   }
-
-  .workout-calendar .react-calendar__tile--now .workout-calendar__trainingIndicator {
-    bottom: -2px;
-  }
-
-  .workout-calendar .react-calendar__tile--now .workout-calendar__dot {
-    color: #4caf50;
-  }
-
-  .workout-calendar .react-calendar__tile--active .workout-calendar__dot {
-    color: #4caf50;
-  }
-
   .workout-calendar .react-calendar__month-view__days {
     display: grid !important;
     grid-template-columns: repeat(7, 1fr) !important;
@@ -221,8 +211,9 @@
       font-size: 13px;
     }
 
-    .workout-calendar__dot {
-      font-size: 7px;
+    .workout-calendar__trainingBadge {
+      @apply px-1.5 py-0.5;
+      font-size: 9px;
     }
   }
 }

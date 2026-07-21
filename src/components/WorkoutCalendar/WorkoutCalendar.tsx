@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Calendar from 'react-calendar';
 
 type ValuePiece = Date | null;
@@ -19,16 +19,18 @@ export default function WorkoutCalendar({
 }: WorkoutCalendarProps) {
   const [value, setValue] = useState<Value>(new Date());
 
-  // 날짜를 YYYY-MM-DD 형식으로 변환
+  const trainingDateSet = useMemo(() => new Set(trainingDates), [trainingDates]);
+
+  // UTC 변환으로 날짜가 하루 밀리지 않도록 달력의 로컬 날짜를 사용한다.
   const formatDate = (date: Date): string => {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
 
-  // 해당 날짜에 트레이닝 기록이 있는지 확인
-  const hasTraining = (date: Date): boolean => {
-    const dateStr = formatDate(date);
-    return trainingDates.includes(dateStr);
-  };
+  const hasTraining = (date: Date): boolean =>
+    trainingDateSet.has(formatDate(date));
 
   // 오늘 날짜인지 확인
   const isToday = (date: Date): boolean => {
@@ -46,19 +48,19 @@ export default function WorkoutCalendar({
     const isTodayDate = isToday(date);
     const hasTrainingRecord = hasTraining(date);
 
+    if (!isTodayDate && !hasTrainingRecord) return null;
+
     return (
-      <>
-        {/* 오늘 날짜 라벨 */}
+      <div className="workout-calendar__markers">
         {isTodayDate && (
-          <div className="workout-calendar__todayLabel">Today</div>
+          <span className="workout-calendar__todayLabel">Today</span>
         )}
-        {/* 트레이닝 완료 표시 */}
         {hasTrainingRecord && (
-          <div className="workout-calendar__trainingIndicator">
-            <span className="workout-calendar__dot">●</span>
-          </div>
+          <span className="workout-calendar__trainingBadge" aria-label="운동 기록 있음">
+            <span aria-hidden="true">●</span> 운동
+          </span>
         )}
-      </>
+      </div>
     );
   };
 
