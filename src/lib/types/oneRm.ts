@@ -20,6 +20,10 @@ export interface CalculateResult {
 export interface OneRmHistory {
   author: string;
   trainingName: string; 
+  // 계산된 1RM
   weight: number;
+  // 계산에 사용한 실제 수행 중량과 반복 횟수
+  sourceWeight: number;
+  sourceReps: number;
   unit: string; 
 }

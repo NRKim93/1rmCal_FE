@@ -1,5 +1,6 @@
 ﻿"use client";
 import React, { useState, useEffect } from "react";
+import { isAxiosError } from "axios";
 import { useRouter } from "next/navigation";
 import { RepsTableItem, CalculateResult } from "@/lib/types";
 import Skeleton from "@/components/common/ui/Skeleton";
@@ -14,11 +15,13 @@ export default function OneRMPage() {
   const [reps, setReps] = useState(1);
   const [showResult, setShowResult] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [showIntroSkeleton, setShowIntroSkeleton] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isTrainingOptionsLoading, setIsTrainingOptionsLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [result, setResult] = useState<RepsTableItem[]>([]);
   const [oneRM, setOneRM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [trainingOptions, setTrainingOptions] = useState<TrainingDropDown[]>([]);
 
   const handleUnitChange = (newUnit: "KG" | "LBS") => {
@@ -44,11 +47,6 @@ export default function OneRMPage() {
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowIntroSkeleton(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
 
     const checkLogin = async () => {
         const loggedIn = localStorage.getItem('isLoggedIn');
@@ -65,6 +63,8 @@ export default function OneRMPage() {
         setTrainingOptions(options);
       } catch {
         setTrainingOptions([]);
+      } finally {
+        setIsTrainingOptionsLoading(false);
       }
     };
 
@@ -121,10 +121,10 @@ export default function OneRMPage() {
           setError(null);
           setShowResult(true);
         } catch (error) {
-          const message =                                                                                           
-            error && typeof error === "object" && "response" in error                                               
-            ? (error as any).response?.data?.message                                                              
-            : null;
+          const responseData = isAxiosError(error)
+            ? error.response?.data as { message?: string } | undefined
+            : undefined;
+          const message = responseData?.message;
           const errorMessage = message || (error instanceof Error ? error.message : "1RM 계산 중 오류가 발생했습니다.");
 
           setError(errorMessage);
@@ -155,6 +155,7 @@ export default function OneRMPage() {
     setResult([]);
     setOneRM(null);
     setError(null);
+    setSuccess(null);
     setIsLoading(false);
   };
 
@@ -175,19 +176,33 @@ export default function OneRMPage() {
       setError("유효한 중량을 입력해 주세요.");
       return;
     }
+    if (oneRM === null) {
+      setError("먼저 1RM을 계산해 주세요.");
+      return;
+    }
 
     const payload: OneRmHistory = {
       author: seq,
       trainingName: event,
-      weight: w,
+      weight: oneRM,
+      sourceWeight: w,
+      sourceReps: reps,
       unit,
     };
 
     try {
+      setIsSaving(true);
       await saveOneRm(payload);
       setError(null);
+      setSuccess(`${event} 1RM 기록이 저장되었습니다.`);
     } catch (error) {
-      setError("저장 중 오류가 발생했습니다.");
+      const responseData = isAxiosError(error)
+        ? error.response?.data as { message?: string } | undefined
+        : undefined;
+      setSuccess(null);
+      setError(responseData?.message || "저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -208,8 +223,13 @@ export default function OneRMPage() {
           ⚠️ {error}
         </div>
       )}
+      {success && (
+        <div className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+          ✅ {success}
+        </div>
+      )}
       {/* 종목 선택 */}
-      {showIntroSkeleton ? (
+      {isTrainingOptionsLoading ? (
         <div className="mt-6 space-y-4">
           <div className="space-y-2">
             <Skeleton className="mx-auto h-5 w-24" />
@@ -238,12 +258,15 @@ export default function OneRMPage() {
         <label className="mb-1 block font-semibold">종목 선택</label>
         <select
           value={event}
-          onChange={e => setEvent(e.target.value)}
+          onChange={e => {
+            setEvent(e.target.value);
+            setSuccess(null);
+          }}
           className="w-full rounded border border-gray-300 bg-white p-3 text-center text-base"
         >
           <option value="">종목을 선택하세요</option>
           {trainingOptions.map(option => (
-            <option key={option.seq} value={option.trainingName}>
+            <option key={option.seq} value={option.trainingDisplayName}>
               {option.trainingDisplayName}
             </option>
           ))}
@@ -297,8 +320,9 @@ export default function OneRMPage() {
             type="button"
             className="rounded bg-gray-800 px-8 py-3 text-lg font-semibold text-white hover:bg-gray-900"
             onClick={handleSave}
+            disabled={isSaving}
           >
-            저장
+            {isSaving ? "저장 중..." : "저장"}
           </button>
         )}
       </div>
