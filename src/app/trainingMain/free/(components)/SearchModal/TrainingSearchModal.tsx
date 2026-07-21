@@ -4,6 +4,7 @@ import React, { useMemo, useCallback } from "react";
 import { Modal } from "@/components/common/Modal";
 import { Button } from "@/components/common/Button";
 import { useAutoComplete } from "@/hooks/useAutocomplete";
+import Skeleton from "@/components/common/ui/Skeleton";
 
 interface TrainingSearchModalProps {
   isOpen: boolean;
@@ -100,8 +101,11 @@ export default function TrainingSearchModal({
 
       {hasQuery && (
         isLoading ? (
-          <div className="mt-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500">
-            Loading...
+          <div role="status" aria-label="운동 종목 검색 중" className="mt-2 space-y-2 rounded-md border border-gray-200 bg-white p-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Skeleton key={index} className="h-5 w-full" />
+            ))}
+            <span className="sr-only">운동 종목 검색 중</span>
           </div>
         ) : results.length > 0 ? (
           <ul className="mt-2 max-h-64 overflow-auto rounded-md border border-gray-200 bg-white">
