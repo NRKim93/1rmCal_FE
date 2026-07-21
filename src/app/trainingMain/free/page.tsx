@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Header } from "@/components/common/Header";
 import { Button } from "@/components/common/Button";
+import { FreeTrainingSkeleton } from "@/components/common/ui/PageSkeletons";
 import TrainingExerciseCard from "./(components)/TrainingExerciseCard/TrainingExerciseCard";
 import TrainingSearchModal from "./(components)/SearchModal/TrainingSearchModal";
 import RestTimePickerModal from "./(components)/RestTimePickerModal/RestTimePickerModal";
@@ -12,6 +13,7 @@ import {
   TrainingCreate,
   TrainingExercise,
   TrainingHistoryItem,
+  ProgramTrainingSessionResponse,
   TrainingSet,
   WeightUnit,
 } from "@/lib/types/training";
@@ -100,6 +102,25 @@ function parseRepsInput(raw: string) {
   return Number.isFinite(next) ? next : null;
 }
 
+function serializeEditableExercises(exercises: TrainingExercise[]) {
+  return JSON.stringify(
+    exercises.map((exercise) => ({
+      id: exercise.id,
+      trainingCategorySeq: exercise.trainingCategorySeq,
+      name: exercise.name,
+      restLabel: exercise.restLabel,
+      sets: exercise.sets.map((set) => ({
+        id: set.id,
+        weight: set.weight,
+        unit: set.unit,
+        reps: set.reps,
+        restSec: set.restSec,
+        done: set.done,
+      })),
+    })),
+  );
+}
+
 type RestPickerTarget =
   | { type: "exercise"; exerciseId: string }
   | { type: "latestSet"; exerciseId: string; setId: string };
@@ -115,7 +136,7 @@ type RestCountdownTarget = {
 
 export default function FreeTrainingPage() {
   return (
-    <React.Suspense fallback={null}>
+    <React.Suspense fallback={<FreeTrainingSkeleton />}>
       <FreeTrainingContent />
     </React.Suspense>
   );
@@ -218,8 +239,10 @@ function FreeTrainingContent() {
   const [isRestCountdownModalOpen, setIsRestCountdownModalOpen] = useState(false);
   const [isElapsedTimerUserPaused, setIsElapsedTimerUserPaused] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [exercises, setExercises] = useState<TrainingExercise[]>([]);
   const [latestHistoryItems, setLatestHistoryItems] = useState<TrainingHistoryItem[]>([]);
+  const [programSession, setProgramSession] = useState<ProgramTrainingSessionResponse | null>(null);
   const initialExercisesJsonRef = useRef<string>("[]");
 
   const { data: autoCompleteList = [] } = useTrainingAutoCompleteQuery(true);
@@ -270,7 +293,7 @@ function FreeTrainingContent() {
     return map;
   }, [latestHistoryItems, autoIndex]);
 
-  const resolveExerciseKey = (name: string) => {
+  const resolveExerciseKey = useCallback((name: string) => {
     if (hasKorean(name)) {
       const koKey = normKo(name);
       return autoIndex.byKo.get(koKey)?.trainingName ?? koKey;
@@ -278,9 +301,9 @@ function FreeTrainingContent() {
 
     const enKey = normEn(name);
     return autoIndex.byEn.get(enKey)?.trainingName ?? enKey;
-  };
+  }, [autoIndex]);
 
-  const getPreviousItemsForExercise = (exerciseName: string) => {
+  const getPreviousItemsForExercise = useCallback((exerciseName: string) => {
     const resolved = resolveExerciseKey(exerciseName);
     const baseNames = getNameBases(exerciseName);
     const candidates = Array.from(
@@ -298,7 +321,7 @@ function FreeTrainingContent() {
       if (found && found.length > 0) return found;
     }
     return [];
-  };
+  }, [latestHistoryMap, resolveExerciseKey]);
 
   useEffect(() => {
     if (exercises.length === 0) return;
@@ -324,40 +347,60 @@ function FreeTrainingContent() {
 
       return changed ? next : prev;
     });
-  }, [latestHistoryMap]); // Sync previous values after history is loaded
+  }, [exercises.length, getPreviousItemsForExercise, latestHistoryMap]);
 
   useEffect(() => {
     const fetchLatestHistory = async () => {
       try {
-        // mode=free인 경우: sessionStorage를 무시하고 초기 상태 유지
         if (mode === "free") {
-          console.log("📌 자유 트레이닝 모드: 초기 상태 유지");
+          setProgramSession(null);
+          setIsInitialLoading(false);
+
           return;
         }
 
-        // mode=program인 경우: sessionStorage에서 프로그램 기록 로드
-        console.log("🎯 프로그램 모드: sessionStorage에서 로드 시도");
-
-        const savedHistory = sessionStorage.getItem("latestTrainingHistory");
-        console.log('📨 free page: sessionStorage 확인', savedHistory);
-        if (savedHistory) {
-          try {
-            const parsed = JSON.parse(savedHistory);
-            console.log('✅ free page: sessionStorage 파싱 성공', parsed);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setLatestHistoryItems(parsed);
-              console.log('✅ free page: latestHistoryItems 설정됨', parsed);
-              // 사용한 후 sessionStorage에서 삭제
-              sessionStorage.removeItem("latestTrainingHistory");
-              return;
-            }
-          } catch (e) {
-            console.error("❌ sessionStorage parse error:", e);
-            sessionStorage.removeItem("latestTrainingHistory");
-          }
+        const savedSession = sessionStorage.getItem("programTrainingSession");
+        if (!savedSession) {
+          window.alert("시작할 프로그램 회차 정보가 없습니다.");
+          router.push("/trainingMain");
+          return;
         }
 
-        // sessionStorage에 없으면 API에서 가져오기 (fallback)
+        const session = JSON.parse(savedSession) as ProgramTrainingSessionResponse;
+        if (!session.programDaySeq || !Array.isArray(session.exercises)) {
+          throw new Error("invalid program training session");
+        }
+        setProgramSession(session);
+
+        const programExercises: TrainingExercise[] = session.exercises.map(
+          (exercise) => ({
+            id: makeId("ex"),
+            trainingCategorySeq: exercise.trainingCategorySeq,
+            name: `${exercise.trainingDisplayName || exercise.trainingName}${
+              session.useOneRmEstimates && exercise.estimatedWeightNote
+                ? ` (${exercise.estimatedWeightNote})`
+                : ""
+            }`,
+            restLabel: formatMMSS(exercise.restSeconds ?? 0),
+            sets: Array.from({ length: exercise.targetSets }, () => ({
+              id: makeId("set"),
+              previous: "-",
+              weight:
+                session.useOneRmEstimates &&
+                typeof exercise.estimatedWeight === "number"
+                  ? String(exercise.estimatedWeight)
+                  : "0",
+              unit: (exercise.oneRmUnit === "LBS" ? "lbs" : "kg") as WeightUnit,
+              reps: exercise.targetRepsMin,
+              restSec: exercise.restSeconds ?? 0,
+              done: false,
+            })),
+          }),
+        );
+        setExercises(programExercises);
+        initialExercisesJsonRef.current = serializeEditableExercises(programExercises);
+
+        // 프로그램 목표와 별개로 이전 기록은 참고값 표시에만 사용한다.
         const seqStr = localStorage.getItem("seq");
         const seq = parseSeq(seqStr);
         if (seq === null) {
@@ -369,16 +412,21 @@ function FreeTrainingContent() {
         const trainingHistory = latestTraining?.training_history ?? [];
         setLatestHistoryItems(trainingHistory);
       } catch (error) {
-        console.error("latest history fetch failed", error);
+        console.error("program session load failed", error);
+        sessionStorage.removeItem("programTrainingSession");
+        window.alert("프로그램 회차를 불러오지 못했습니다.");
+        router.push("/trainingMain");
+      } finally {
+        setIsInitialLoading(false);
       }
     };
 
     fetchLatestHistory();
-  }, [mode]);
+  }, [mode, router]);
 
   // latestHistoryItems를 받으면 exercises 자동 구성
   useEffect(() => {
-    if (latestHistoryItems.length === 0) return;
+    if (mode === "program" || latestHistoryItems.length === 0) return;
 
     console.log('🔄 latestHistoryItems 기반으로 exercises 생성', latestHistoryItems);
 
@@ -390,7 +438,7 @@ function FreeTrainingContent() {
       // 같은 이름의 운동들을 grouping해서 set으로 변환
       const sameNameItems = latestHistoryItems.filter((i) => i.name === item.name);
 
-      sameNameItems.forEach((historyItem, idx) => {
+      sameNameItems.forEach((historyItem) => {
         sets.push({
           id: makeId("set"),
           previous: formatPrevious(historyItem),
@@ -427,10 +475,12 @@ function FreeTrainingContent() {
 
     console.log('✅ exercises 생성 완료', uniqueExercises);
     setExercises(uniqueExercises);
-    initialExercisesJsonRef.current = JSON.stringify(uniqueExercises);
-  }, [latestHistoryItems]);
+    initialExercisesJsonRef.current = serializeEditableExercises(uniqueExercises);
+  }, [latestHistoryItems, mode]);
 
-  const trainingDateLabel = useMemo(() => `${todayYYYYMMDD()} 트레이닝 기록`, []);
+  const trainingDateLabel = programSession
+    ? `${programSession.programName} · ${programSession.currentWeek}주차 ${programSession.currentDay}회차 (${programSession.dayName})`
+    : `${todayYYYYMMDD()} 트레이닝 기록`;
 
   const addExercise = (exerciseName: string) => {
     setIsElapsedTimerUserPaused(false);
@@ -664,7 +714,7 @@ function FreeTrainingContent() {
     [exercises]
   );
   const hasUnsavedChanges = useMemo(
-    () => JSON.stringify(exercises) !== initialExercisesJsonRef.current,
+    () => serializeEditableExercises(exercises) !== initialExercisesJsonRef.current,
     [exercises]
   );
 
@@ -846,12 +896,14 @@ function FreeTrainingContent() {
         const parsedWeight = Number.parseFloat(set.weight);
         payload.push({
           trainingSeq,
+          trainingCategorySeq: exercise.trainingCategorySeq,
           userSeq,
           name,
           weight: Number.isFinite(parsedWeight) ? parsedWeight : 0,
           weightUnit: set.unit,
           reps: Number.isFinite(set.reps) ? Math.max(0, set.reps) : 0,
           rest: formatMMSS(set.restSec),
+          restSeconds: set.restSec,
           sets: index + 1,
         });
       });
@@ -884,9 +936,27 @@ function FreeTrainingContent() {
 
     setIsSaving(true);
     try {
-      await trainingCreate(payload);
-      initialExercisesJsonRef.current = JSON.stringify(exercises);
-      router.back();
+      if (mode === "program" && !programSession) {
+        window.alert("프로그램 회차 정보가 없습니다.");
+        return;
+      }
+      await trainingCreate(
+        payload,
+        mode === "program" && programSession
+          ? {
+              mode: "PROGRAM",
+              userProgramSeq: programSession.userProgramSeq,
+              programDaySeq: programSession.programDaySeq,
+            }
+          : undefined,
+      );
+      initialExercisesJsonRef.current = serializeEditableExercises(exercises);
+      if (mode === "program") {
+        sessionStorage.removeItem("programTrainingSession");
+        router.push("/trainingMain");
+      } else {
+        router.back();
+      }
     } catch (error) {
       console.error("training create failed", error);
       window.alert("저장 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
@@ -900,8 +970,15 @@ function FreeTrainingContent() {
       "금일 트레이닝을 취소하고 이전 페이지로 이동할까요?\n작성한 내용은 저장되지 않습니다."
     );
     if (!ok) return;
+    if (mode === "program") {
+      sessionStorage.removeItem("programTrainingSession");
+    }
     router.back();
   };
+
+  if (isInitialLoading) {
+    return <FreeTrainingSkeleton />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans">

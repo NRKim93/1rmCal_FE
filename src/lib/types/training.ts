@@ -4,6 +4,8 @@ export interface TrainingHistoryItem {
   weight: string;
   weight_unit: string;
   reps: string;
+  sets?: number;
+  rest?: string;
 }
 
 // 사용자 정보
@@ -60,6 +62,8 @@ export type TrainingSet = {
 export type TrainingExercise = {
   // 프론트에서만 쓰는 로컬 식별자
   id: string;
+  // 프로그램 운동에서 사용하는 정규 운동 종목 PK
+  trainingCategorySeq?: number;
   // 종목명
   name: string;
   // 휴식 시간 표시 라벨(mm:ss)
@@ -81,6 +85,8 @@ export interface TrainingCreate {
   seq?: number; 
   // 트레이닝 세션 식별자 (생성 시 미포함 가능)
   trainingSeq?: number;
+  // 프로그램 운동에서 사용하는 정규 운동 종목 PK
+  trainingCategorySeq?: number;
   // 사용자 식별자
   userSeq:number;
   // 종목명
@@ -93,6 +99,113 @@ export interface TrainingCreate {
   reps:number; 
   // 휴식 시간(mm:ss)
   rest:string;
+  // 실제 휴식 시간(초)
+  restSeconds?: number;
   // 세트 번호(또는 세트 인덱스)
   sets:number; 
+}
+
+export interface ProgramTrainingSessionResponse {
+  userProgramSeq: number;
+  programSeq: number;
+  programName: string;
+  status: "ACTIVE" | "PAUSED" | "COMPLETED" | "CANCELLED";
+  currentWeek: number;
+  currentDay: number;
+  programDaySeq: number;
+  dayName: string;
+  exercises: TrainingProgramExerciseResponse[];
+  // 프로그램 시작 전 사용자가 예상 중량 적용을 선택했는지 나타내는 UI 상태
+  useOneRmEstimates?: boolean;
+}
+
+export interface TrainingCreateContext {
+  mode: "PROGRAM";
+  userProgramSeq: number;
+  programDaySeq: number;
+}
+
+export interface CreateTrainingProgramExercise {
+  trainingCategorySeq: number;
+  oneRmReferenceCategorySeq?: number;
+  exerciseOrder: number;
+  targetSets: number;
+  targetRepsMin: number;
+  targetRepsMax: number;
+  restSeconds?: number;
+  targetWeightRate?: number;
+}
+
+export interface CreateTrainingProgramDay {
+  dayOrder: number;
+  name: string;
+  exercises: CreateTrainingProgramExercise[];
+}
+
+export interface CreateTrainingProgramWeek {
+  weekOrder: number;
+  days: CreateTrainingProgramDay[];
+}
+
+export interface CreateTrainingProgramRequest {
+  code: string;
+  name: string;
+  description?: string;
+  version: number;
+  isActive: boolean;
+  weeks: CreateTrainingProgramWeek[];
+}
+
+export interface TrainingProgramExerciseResponse {
+  seq: number;
+  trainingCategorySeq: number;
+  trainingName: string;
+  trainingDisplayName: string;
+  exerciseOrder: number;
+  targetSets: number;
+  targetRepsMin: number;
+  targetRepsMax: number;
+  restSeconds: number | null;
+  targetWeightRate: number | null;
+  oneRmSupported?: boolean;
+  oneRmReferenceCategorySeq?: number | null;
+  oneRmReferenceTrainingName?: string | null;
+  oneRmReferenceTrainingDisplayName?: string | null;
+  oneRmWeight?: number | null;
+  oneRmUnit?: string | null;
+  estimatedWeight?: number | null;
+  estimatedWeightNote?: string | null;
+}
+
+export interface TrainingProgramDayResponse {
+  seq: number;
+  dayOrder: number;
+  name: string;
+  exercises: TrainingProgramExerciseResponse[];
+}
+
+export interface TrainingProgramWeekResponse {
+  weekOrder: number;
+  days: TrainingProgramDayResponse[];
+}
+
+export interface TrainingProgramResponse {
+  seq: number;
+  code: string;
+  name: string;
+  description: string | null;
+  version: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  progress?: {
+    userProgramSeq: number | null;
+    status: "NOT_STARTED" | "ACTIVE" | "PAUSED" | "COMPLETED" | "CANCELLED";
+    completedSessions: number;
+    totalSessions: number;
+    percentage: number;
+    currentWeek: number;
+    currentDay: number;
+  };
+  weeks: TrainingProgramWeekResponse[];
 }

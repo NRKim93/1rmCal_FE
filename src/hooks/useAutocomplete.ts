@@ -167,6 +167,7 @@ export function useAutoComplete(options?: { enabled?: boolean; limit?: number })
     isLoading,
     isError,
     error,
+    items: list,
 
     query,
     setQuery: setQuerySafe,

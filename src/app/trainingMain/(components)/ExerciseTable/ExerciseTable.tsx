@@ -10,10 +10,10 @@ export default function ExerciseTable({ exercises }: ExerciseTableProps) {
   return (
     <div className="mb-5">
       <div className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 bg-[#9e9e9e] px-4 py-3 text-sm font-bold text-white">
-        <span className="min-w-0">Exercise</span>
-        <span>sets</span>
-        <span>Weight</span>
-        <span>Reps</span>
+        <span className="min-w-0">운동 종목</span>
+        <span>세트</span>
+        <span>목표 중량</span>
+        <span>반복</span>
       </div>
       {exercises.map((e, i) => (
         <div
